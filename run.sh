@@ -16,8 +16,9 @@ nasm -f elf32 $ASMDIR/kernel.asm -o $BUILDDIR/kasm.o
 
 gcc -m32 -c $SRCDIR/kernel.c -o $BUILDDIR/kernel.o
 gcc -m32 -c $SRCDIR/stdio.c -o $BUILDDIR/stdio.o
+gcc -m32 -c $SRCDIR/stdproc.c -o $BUILDDIR/stdproc.o
 
-ld -m elf_i386 -T $CONFDIR/linker.ld -o kernel $BUILDDIR/kasm.o $BUILDDIR/kernel.o $BUILDDIR/stdio.o
+ld -m elf_i386 -T $CONFDIR/linker.ld -o kernel $BUILDDIR/kasm.o $BUILDDIR/kernel.o $BUILDDIR/stdio.o $BUILDDIR/stdproc.o
 
 echo "-------"
 echo "Compilation succeeded!"
