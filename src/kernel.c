@@ -2,8 +2,7 @@
 *  kernel.c
 */
 
-#include "kernel.h"
-
+#include "../lib/kernel.h"
 #include "../lib/stdio.h"
 
 void kmain(void)
