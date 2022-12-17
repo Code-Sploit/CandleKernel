@@ -7,9 +7,9 @@
 
 void kmain(void)
 {
-	const char *str = "my first kernel";
+	const char *_msg1 = "Booting up: CandleKernel!";
 
-	kstd_write(str);
+	kstd_write(_msg1);
 
 	return;
 }
