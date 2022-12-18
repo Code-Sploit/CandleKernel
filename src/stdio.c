@@ -10,86 +10,72 @@ void kstd_set_vidptr(int __size)
 	VIDEO_POINTER_SIZE = __size;
 }
 
+void kstd_free_space(int __size)
+{
+	unsigned int cursor = VIDEO_POINTER_SIZE;
+
+	while (cursor < __size)
+	{
+		VIDEO_MEMORY_POINTER[cursor] = ' ';
+		VIDEO_MEMORY_POINTER[cursor + 1] = ATTR_BYTE_BLK_ON_BLK;
+
+		cursor = cursor + 2;
+	}
+}
+
 void kstd_clear(void)
 {
-	unsigned int __jp = 0;
+	unsigned int cursor = 0;
 
-	while (__jp < (SCREEN_SIZE))
+	while (cursor < (SCREEN_SIZE))
 	{
-		VIDEO_MEMORY_POINTER[__jp] = ' ';
-		VIDEO_MEMORY_POINTER[__jp + 1] = ATTR_BYTE_BLK_ON_BLK;
+		VIDEO_MEMORY_POINTER[cursor] = ' ';
+		VIDEO_MEMORY_POINTER[cursor + 1] = ATTR_BYTE_BLK_ON_BLK;
 
-		__jp = __jp + 2;
+		cursor = cursor + 2;
 	}
 }
 
 void kstd_handle_escape(char __p)
 {
-	if (__p == '\n')
+	switch (__p)
 	{
-		/* We need to get the current position in video memory */
-
-		int pos = VIDEO_POINTER_SIZE;
-
-		/* Now we need to see where we are in the row */
-
-		pos = pos % SCREEN_SIZE_COLS;
-
-		/* Then we need to compute the offset between the end of the line and where we are now */
-
-		int offset = (SCREEN_SIZE_COLS * SCREEN_SIZE_BLEN) - pos;
-
-		/* Now write a ' ' char for that offset */
-
-		int i = 0;
-
-		while (i < offset)
+		case '\n':
 		{
-			VIDEO_MEMORY_POINTER[i] = ' ';
-			VIDEO_MEMORY_POINTER[i + 1] = ATTR_BYTE_BLK_ON_BLK;
+			int offset_to_eol = (SCREEN_SIZE_COLS * SCREEN_SIZE_BLEN) - (VIDEO_POINTER_SIZE % SCREEN_SIZE_COLS);
 
-			i = i + 2;
+			VIDEO_POINTER_SIZE = VIDEO_POINTER_SIZE + offset_to_eol;
 		}
-
-		/* Globally increment VIDEO_POINTER_SIZE */
-
-		VIDEO_POINTER_SIZE = VIDEO_POINTER_SIZE + offset;
 	}
 }
 
 void kstd_write(const char *__sptr)
 {
-	unsigned int __string_len = (kstd_strlen(__sptr) * SCREEN_SIZE_BLEN);
-	unsigned int __jp	  = VIDEO_POINTER_SIZE;
-	unsigned int __ip	  = VIDEO_POINTER_SIZE;
-	unsigned int __kp	  = 0;
+	unsigned int strlen  = kstd_strlen(__sptr);
 
-	while (__ip < (VIDEO_POINTER_SIZE + __string_len))
-	{
-		VIDEO_MEMORY_POINTER[__ip] = ' ';
-		VIDEO_MEMORY_POINTER[__ip + 1] = ATTR_BYTE_LG_ON_BLK;
-		
-		__ip = __ip + 2;
-	}
+	unsigned int viditer = VIDEO_POINTER_SIZE;
+	unsigned int striter = 0;
 
-	while (__jp < (VIDEO_POINTER_SIZE + __string_len))
+	kstd_free_space(strlen);
+
+	while (striter < strlen)
 	{
-		if (__sptr[__kp] == '\n')
+		if (__sptr[striter] == '\n')
 		{
-			kstd_handle_escape(__sptr[__kp]);
+			kstd_handle_escape(__sptr[striter]);
 
-			__jp = VIDEO_POINTER_SIZE;
-			__kp = __kp + 1;
+			viditer = viditer + 2;
+
+			striter++;
 
 			continue;
 		}
 
-		VIDEO_MEMORY_POINTER[__jp] = __sptr[__kp];
-		VIDEO_MEMORY_POINTER[__jp + 1] = ATTR_BYTE_LG_ON_BLK;
+		VIDEO_MEMORY_POINTER[viditer] = __sptr[striter];
+		VIDEO_MEMORY_POINTER[viditer + 1] = ATTR_BYTE_LG_ON_BLK;
 
-		__jp = __jp + 2;
-		__kp = __kp + 1;
+		viditer = viditer + 2;
+
+		striter++;
 	}
-	
-	kstd_set_vidptr(VIDEO_POINTER_SIZE + __string_len);
 }
