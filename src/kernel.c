@@ -3,19 +3,20 @@
 */
 
 #include "../lib/kernel.h"
+#include "../lib/stdlib.h"
 #include "../lib/stdio.h"
 
 void kmain(void)
 {
-	const char *_msg1 = "Booting up: CandleKernel!\n";
-	const char *_msg2 = "Hello world!\n";
-	const char *_msg3 = "Newline test\n";
-
+	/* Clear the screen */
 	kstd_clear();
 
-	kstd_write(_msg1);
-	kstd_write(_msg2);
-	kstd_write(_msg3);
+	/* Initialize memory */
+	kstd_mem_init(NULL, (void *) 16000);
+
+	/* Test allocating a string */
+
+	char *str1 = kstd_mem_malloc(sizeof(char));
 
 	return;
 }
