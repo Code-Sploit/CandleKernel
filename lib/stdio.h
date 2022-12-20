@@ -23,3 +23,5 @@ static int VIDEO_POINTER_SIZE = 0;
 
 void kstd_clear(void);
 void kstd_write(const char *__sptr);
+
+int kstd_strlen(const char *__ptr);
