@@ -176,3 +176,87 @@ void kstd_mem_free(void *__ADDR)
 		__BTEMP = __BTEMP->__next;
 	}
 }
+
+/* Assert string functions */
+
+int kstd_isupper(char __c)
+{
+	if (__c >= 'A' && __c <= 'Z')
+	{
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+int kstd_islower(char __c)
+{
+	if (__c >= 'a' && __c <= 'z')
+	{
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+char kstd_toupper(char __c)
+{
+	if (__c >= 'a' && __c <= 'z')
+	{
+		return (__c - 32);
+	}
+
+	return __c;
+}
+
+char kstd_tolower(char __c)
+{
+	if (__c >= 'A' && __c <= 'Z')
+	{
+		return (__c + 32);
+	}
+
+	return __c;
+}
+
+int kstd_cmatch(char __c1, char __c2)
+{
+	if (__c1 == __c2)
+	{
+		return TRUE;
+	}
+	else
+	{
+		return FALSE;
+	}
+
+	return FALSE;
+}
+
+int kstd_strcmp(char *__s1, char *__s2)
+{
+	int __len1 = kstd_strlen(__s1);
+	int __len2 = kstd_strlen(__s2);
+
+	if (__len1 == 0 && __len2 == 0)
+	{
+		return TRUE;
+	}
+
+	if (__len1 != __len2)
+	{
+		return FALSE;
+	}
+
+	for (int i = 0; i < __len1; i++)
+	{
+		int _cmatch = kstd_cmatch(__s1[i], __s2[i]);
+
+		if (_cmatch == FALSE)
+		{
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
