@@ -50,3 +50,13 @@ void *kstd_mem_calloc(int __N, int __SIZE);
 void *kstd_mem_realloc(void *__PTR, int __SIZE);
 
 void kstd_mem_free(void *__ADDR);
+
+int kstd_isupper(char __c);
+int kstd_islower(char __c);
+
+char kstd_toupper(char __c);
+char kstd_tolower(char __c);
+
+int kstd_cmatch(char __c1, char __c2);
+
+int kstd_strcmp(char *__s1, char *__s2);
