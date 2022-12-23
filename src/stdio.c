@@ -78,4 +78,6 @@ void kstd_write(const char *__sptr)
 
 		striter++;
 	}
+
+	VIDEO_POINTER_SIZE = viditer;
 }
