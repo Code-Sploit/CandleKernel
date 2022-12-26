@@ -9,7 +9,47 @@ void *G_MEMORY_END_ADDR   = NULL;
 unsigned long MEMORY_TOTAL_SIZE = 0;
 unsigned long MEMORY_USED_SIZE  = 0;
 
-MEMORY_BLOCK *MEM_HEAD;
+MEMORY_BLOCK *MEM_HEAD = NULL;
+
+/* Conversion functions */
+void kstd_itoa(char *__BUF, int __BASE, int __D)
+{
+    char *__p = __BUF;
+    char *__p1, *__p2;
+
+    unsigned long __u = __D;
+    
+	int __DIV = 10;
+
+    if (__BASE == 'd' && __D < 0) {
+        *__p++ = '-';
+        __BUF++;
+        __u = -__D;
+    } else if (__BASE == 'x')
+        __DIV = 16;
+
+    do {
+        int __REMAIN = __u % __DIV;
+        *__p++ = (__REMAIN < 10) ? __REMAIN + '0' : __REMAIN + 'a' - 10;
+    } while (__u /= __DIV);
+
+    /* Terminate BUF. */
+    *__p = 0;
+
+    /* Reverse BUF. */
+    __p1 = __BUF;
+    __p2 = __p - 1;
+
+    while (__p1 < __p2) {
+        char __TEMP = *__p1;
+
+        *__p1 = *__p2;
+        *__p2 = __TEMP;
+
+        __p1++;
+        __p2--;
+    }
+}
 
 /* Memory */
 
@@ -35,6 +75,15 @@ void *kstd_mem_brk(int __SIZE)
 {
 	void *__ADDR = NULL;
 
+	kstd_report("BRK CALLED!\n");
+	
+	char *str;
+
+	kstd_itoa(str, 10, __SIZE);
+
+	kstd_report("SIZE: ");
+	kstd_report(str);
+
 	if (__SIZE <= 0)
 	{
 		kstd_warn("Warning: kstd_mem_brk() called with a SIZE <= 0\n");
@@ -49,9 +98,9 @@ void *kstd_mem_brk(int __SIZE)
 		return NULL;
 	}
 
-	__ADDR = (G_MEMORY_START_ADDR + MEMORY_TOTAL_SIZE) + __SIZE + sizeof(void *);
+	__ADDR = G_MEMORY_START_ADDR + MEMORY_USED_SIZE + __SIZE + sizeof(void *);
 
-	MEMORY_USED_SIZE = (MEMORY_USED_SIZE + __SIZE + sizeof(void *));
+	MEMORY_USED_SIZE += __SIZE + sizeof(void *);
 
 	return __ADDR;
 }
@@ -177,6 +226,46 @@ void kstd_mem_free(void *__ADDR)
 	}
 }
 
+void kstd_mem_print_blocks(void)
+{
+    MEMORY_BLOCK *__BLOCK = MEM_HEAD;
+
+	char *_str;
+
+	kstd_itoa(_str, 10, sizeof(MEMORY_BLOCK));
+
+    kstd_report("Block size: ");
+    kstd_report(_str);
+
+    while (MEM_HEAD != NULL)
+    {
+		char *_size;
+		char *_free;
+		char *_data;
+		char *_curr;
+		char *_next;
+
+		kstd_itoa(_size, 10, __BLOCK->meta.size);
+		kstd_itoa(_free, 10, __BLOCK->meta.is_free);
+		kstd_itoa(_data, 16, (int)__BLOCK->__data);
+		kstd_itoa(_curr, 16, (int)__BLOCK);
+		kstd_itoa(_next, 16, (int)__BLOCK->__next);
+
+		kstd_report("Size: ");
+		kstd_report(_size);
+		kstd_report("\nFree: ");
+		kstd_report(_free);
+		kstd_report("\nData: ");
+		kstd_report(_data);
+		kstd_report("\nCurr: ");
+		kstd_report(_curr);
+		kstd_report("\nNext: ");
+		kstd_report(_next);
+
+        MEM_HEAD = MEM_HEAD->__next;
+    }
+}
+
 /* Assert string functions */
 
 int kstd_isupper(char __c)
@@ -232,7 +321,7 @@ int kstd_cmatch(char __c1, char __c2)
 
 	return FALSE;
 }
-
+/*
 int kstd_strcmp(char *__s1, char *__s2)
 {
 	int __len1 = kstd_strlen(__s1);
@@ -259,4 +348,4 @@ int kstd_strcmp(char *__s1, char *__s2)
 	}
 
 	return TRUE;
-}
+}*/
