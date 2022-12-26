@@ -75,15 +75,6 @@ void *kstd_mem_brk(int __SIZE)
 {
 	void *__ADDR = NULL;
 
-	kstd_report("BRK CALLED!\n");
-	
-	char *str;
-
-	kstd_itoa(str, 10, __SIZE);
-
-	kstd_report("SIZE: ");
-	kstd_report(str);
-
 	if (__SIZE <= 0)
 	{
 		kstd_warn("Warning: kstd_mem_brk() called with a SIZE <= 0\n");
