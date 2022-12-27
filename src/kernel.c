@@ -5,6 +5,7 @@
 #include "../lib/kernel.h"
 #include "../lib/stdio.h"
 #include "../lib/memory.h"
+#include "../lib/stdproc.h"
 
 void kmain(void)
 {
@@ -17,12 +18,14 @@ void kmain(void)
 
 	kstd_mem_init(__KSTD_MEM_START_ADDR, __KSTD_MEM_END_ADDR);
 
-	/* Test allocating & deallocating a string */
-	char *str = kstd_mem_malloc(sizeof(char));
+	/* Process management testing */
 
-	kstd_strcat(str, "Hello, World!\n");
-	kstd_write(str);
-	kstd_mem_free(str);
+	__initialize_proc();
+
+	int pid = __create_proc(__PROCESS_RUNNING, 1);
+	int pid2 = __create_proc(__PROCESS_RUNNING, 1);
+
+	__print_procs();
 
 	return;
 }
