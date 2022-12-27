@@ -4,6 +4,7 @@
 
 #include "../lib/stdio.h"
 #include "../lib/memory.h"
+#include "../lib/stdlib.h"
 
 void kstd_set_vidptr(int __size)
 {
@@ -49,6 +50,21 @@ void kstd_handle_escape(char __p)
 	}
 }
 
+void kstd_newline(void)
+{
+	int offset = (SCREEN_SIZE_COLS * SCREEN_SIZE_BLEN) - (VIDEO_POINTER_SIZE % SCREEN_SIZE_COLS);
+
+	VIDEO_POINTER_SIZE = (VIDEO_POINTER_SIZE + offset);
+}
+
+void kstd_putchar(char __c)
+{
+	VIDEO_MEMORY_POINTER[VIDEO_POINTER_SIZE]     = __c;
+	VIDEO_MEMORY_POINTER[VIDEO_POINTER_SIZE + 1] = 0x07;
+
+	VIDEO_POINTER_SIZE += 2;
+}
+
 void kstd_write(const char *__sptr)
 {
 	unsigned int strlen  = kstd_strlen(__sptr);
@@ -62,9 +78,9 @@ void kstd_write(const char *__sptr)
 	{
 		if (__sptr[striter] == '\n')
 		{
-			kstd_handle_escape(__sptr[striter]);
+			kstd_newline();
 
-			viditer = viditer + 2;
+			viditer = VIDEO_POINTER_SIZE;
 
 			striter++;
 
@@ -80,4 +96,93 @@ void kstd_write(const char *__sptr)
 	}
 
 	VIDEO_POINTER_SIZE = viditer;
+}
+
+void printk(const char *__format, ...)
+{
+	char **__args = (char **)__format;
+	char __buf[32];
+
+	int c;
+
+	__args++;
+
+	kstd_memset(__buf, 0, sizeof(__buf));
+
+	while ((c = *__format++) != 0)
+	{
+		if (c != '%')
+		{
+			kstd_putchar(c);
+		}
+		else
+		{
+			char *__p1;
+			char *__p2;
+
+			int pad_x;
+			int pad_y;
+
+			c = *__format++;
+
+			if (c == '0')
+			{
+				pad_x = 1;
+
+				c = *__format++;
+			}
+
+			if (c >= '0' && c <= '9')
+			{
+				pad_y = c - '0';
+
+				c = *__format++;
+			}
+
+			switch (c)
+			{
+				case 'd':
+				case 'u':
+				case 'x':
+				{
+					kstd_itoa(__buf, c, *((int *) __args++));
+
+					__p1 = __buf;
+
+					goto __puts;
+
+					break;
+				}
+
+				case 's':
+				{
+					__p1 = *__args++;
+
+					if (!__p1)
+					{
+						__p1 = "(__NULL__)";
+					}
+				}
+
+				__puts:
+					for (__p2 = __p1; *__p2; __p2++)
+						;
+
+					for (; __p2 < __p1 + pad_y; __p2++)
+						kstd_putchar(pad_x ? '0' : ' ');
+
+					while (*__p1)
+						kstd_putchar(*__p1);
+
+					break;
+
+				default:
+				{
+					kstd_putchar(*((int *) __args++));
+
+					break;
+				}
+			}
+		}
+	}
 }
