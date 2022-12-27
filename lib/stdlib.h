@@ -1,3 +1,6 @@
+#ifndef STDLIB_H
+#define STDLIB_H
+
 #define NULL 0
 
 typedef unsigned char uint8;
@@ -11,7 +14,7 @@ typedef signed int sint32;
 typedef unsigned long long uint64;
 typedef long long int64;
 
-typedef uint32 size_t; 
+typedef uint32 size_t;
 typedef uint32 fd_t;
 
 typedef uint16 word;
@@ -51,6 +54,8 @@ void *kstd_mem_realloc(void *__PTR, int __SIZE);
 
 void kstd_mem_free(void *__ADDR);
 
+void kstd_itoa(char *__BUF, int __BASE, int __D);
+
 int kstd_isupper(char __c);
 int kstd_islower(char __c);
 
@@ -60,3 +65,5 @@ char kstd_tolower(char __c);
 int kstd_cmatch(char __c1, char __c2);
 
 int kstd_strcmp(char *__s1, char *__s2);
+
+#endif
