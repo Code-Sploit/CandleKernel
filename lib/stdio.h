@@ -1,3 +1,6 @@
+#ifndef STDIO_H
+#define STDIO_H
+
 #define SCREEN_SIZE_COLS 80
 #define SCREEN_SIZE_ROWS 25
 #define SCREEN_SIZE_BLEN 2
@@ -22,6 +25,11 @@ static char *VIDEO_MEMORY_POINTER = (char*)0xb8000;
 static int VIDEO_POINTER_SIZE = 0;
 
 void kstd_clear(void);
+void kstd_putchar(char __c);
 void kstd_write(const char *__sptr);
 
+void printk(const char *__format, ...);
+
 int kstd_strlen(const char *__ptr);
+
+#endif
