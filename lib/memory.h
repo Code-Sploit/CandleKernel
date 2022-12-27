@@ -1,3 +1,6 @@
+#ifndef MEMORY_H
+#define MEMORY_H
+
 #include "stdlib.h"
 
 #define KSTD_MEM_BLOCK_SIZE 4096
@@ -37,3 +40,5 @@ int kstd_strlen(const char *__SOURCE);
 int kstd_strcpy(char *__DEST, const char *__SOURCE);
 
 void kstd_strcat(char *__DEST, const char *__SOURCE);
+
+#endif
