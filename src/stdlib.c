@@ -312,31 +312,52 @@ int kstd_cmatch(char __c1, char __c2)
 
 	return FALSE;
 }
-/*
-int kstd_strcmp(char *__s1, char *__s2)
+
+int __kstd_strcmp(char __s1[], char __s2[])
 {
-	int __len1 = kstd_strlen(__s1);
-	int __len2 = kstd_strlen(__s2);
+    int i;
 
-	if (__len1 == 0 && __len2 == 0)
+    for (i = 0; __s1[i] == __s2[i]; i++) {
+        if (__s1[i] == '\0') return 0;
+    }
+    
+	return __s1[i] - __s2[i];
+}
+
+int __kstd_strlen(char *__sptr)
+{
+	int len = 0;
+
+	while (__sptr[len] != '\0')
 	{
-		return TRUE;
+		len++;
 	}
 
-	if (__len1 != __len2)
+	return len;
+}
+
+void __kstd_append_char_to_string(char *__sptr, char c)
+{
+	int __slen = __kstd_strlen(__sptr);
+
+	__sptr[__slen] = c;
+	__sptr[__slen + 1] = '\0';
+}
+
+BOOL __kstd_is_backspace_valid(char *__sptr)
+{
+    int __slen = __kstd_strlen(__sptr);
+
+    if (__slen > 0)
 	{
-		return FALSE;
-	}
+        __sptr[__slen - 1] = '\0';
 
-	for (int i = 0; i < __len1; i++)
+        return TRUE;
+    }
+	else
 	{
-		int _cmatch = kstd_cmatch(__s1[i], __s2[i]);
+        return FALSE;
+    }
 
-		if (_cmatch == FALSE)
-		{
-			return FALSE;
-		}
-	}
-
-	return TRUE;
-}*/
+	return FALSE;
+}
