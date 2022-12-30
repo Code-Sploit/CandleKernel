@@ -35,6 +35,8 @@ void kstd_clear(void)
 
 		cursor = cursor + 2;
 	}
+
+	VIDEO_POINTER_SIZE = 0;
 }
 
 void kstd_handle_escape(char __p)
@@ -50,6 +52,14 @@ void kstd_handle_escape(char __p)
 	}
 }
 
+void kstd_backspace(void)
+{
+	VIDEO_POINTER_SIZE = (VIDEO_POINTER_SIZE - 2);
+
+	VIDEO_MEMORY_POINTER[VIDEO_POINTER_SIZE] = ' ';
+	VIDEO_MEMORY_POINTER[VIDEO_POINTER_SIZE + 1] = 0x00;
+}
+
 void kstd_newline(void)
 {
 	int offset = (SCREEN_SIZE_COLS * SCREEN_SIZE_BLEN) - (VIDEO_POINTER_SIZE % SCREEN_SIZE_COLS);
@@ -57,8 +67,33 @@ void kstd_newline(void)
 	VIDEO_POINTER_SIZE = (VIDEO_POINTER_SIZE + offset);
 }
 
+void kstd_tab(void)
+{
+	int offset = (SCREEN_SIZE_COLS * SCREEN_SIZE_BLEN) - (VIDEO_POINTER_SIZE % SCREEN_SIZE_COLS);
+
+	if (offset < 4)
+	{
+		int remaining = 4 - offset;
+
+		kstd_newline();
+
+		VIDEO_POINTER_SIZE = (VIDEO_POINTER_SIZE) + remaining;
+
+		return;
+	}
+
+	VIDEO_POINTER_SIZE = (VIDEO_POINTER_SIZE + 4);
+}
+
 void kstd_putchar(char __c)
 {
+	if (__c == '\b')
+	{
+		kstd_backspace();
+
+		return;
+	}
+	
 	VIDEO_MEMORY_POINTER[VIDEO_POINTER_SIZE]     = __c;
 	VIDEO_MEMORY_POINTER[VIDEO_POINTER_SIZE + 1] = 0x07;
 
@@ -79,6 +114,17 @@ void kstd_write(const char *__sptr)
 		if (__sptr[striter] == '\n')
 		{
 			kstd_newline();
+
+			viditer = VIDEO_POINTER_SIZE;
+
+			striter++;
+
+			continue;
+		}
+
+		if (__sptr[striter] == '\t')
+		{
+			kstd_tab();
 
 			viditer = VIDEO_POINTER_SIZE;
 
