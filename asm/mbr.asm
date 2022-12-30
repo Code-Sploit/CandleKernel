@@ -5,8 +5,8 @@ mov [BOOT_DRIVE], dl
 mov bp, 0x9000
 mov sp, bp
 
-call __load_kernel
-call __switch_to_32bit
+call load_kernel
+call switch_to_32bit
 jmp $
 
 %include "asm/print-16bit.asm"
@@ -16,11 +16,11 @@ jmp $
 %include "asm/switch-to-32bit.asm"
 
 [bits 16]
-__load_kernel:
+load_kernel:
     mov bx, KERNEL_OFFSET
     mov dh, 31
     mov dl, [BOOT_DRIVE]
-    call __disk_load
+    call disk_load
     ret
 
 [bits 32]
