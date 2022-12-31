@@ -1,5 +1,6 @@
 #include "console.h"
 
+#include "../../lib/memory.h"
 #include "../../lib/stdlib.h"
 #include "../../lib/stdio.h"
 
@@ -29,6 +30,11 @@ void __kstd_execute_help(void)
     kstd_write("REBOOT: Reboots the system.\n");
 }
 
+void __kstd_execute_print_mem_blocks(void)
+{
+    kstd_mem_print_blocks();
+}
+
 void __kstd_console_run(char *__cmd)
 {
     if (__kstd_strcmp(__cmd, __COMMAND_HALT) == 0)
@@ -42,6 +48,10 @@ void __kstd_console_run(char *__cmd)
     else if (__kstd_strcmp(__cmd, __COMMAND_HELP) == 0)
     {
         __kstd_execute_help();
+    }
+    else if (__kstd_strcmp(__cmd, __COMMAND_PRINT_BLOCKS) == 0)
+    {
+        __kstd_execute_print_mem_blocks();
     }
     else
     {

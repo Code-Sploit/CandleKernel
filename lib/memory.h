@@ -63,10 +63,6 @@ void *kstd_mem_pre_alloc_blocks(uint32 __SIZE);
 void kstd_mem_pre_free_block(void *__BLOCK);
 void kstd_mem_pre_free_blocks(void *__BLOCK, uint32 __SIZE);
 
-
-int kstd_strlen(const char *__SOURCE);
-int kstd_strcpy(char *__DEST, const char *__SOURCE);
-
-void kstd_strcat(char *__DEST, const char *__SOURCE);
+void kstd_mem_print_blocks(void);
 
 #endif

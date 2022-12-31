@@ -1,5 +1,6 @@
 #include "../lib/memory.h"
 #include "../lib/panic.h"
+#include "../lib/stdio.h"
 
 static KSTD_MEM_INFO kstd_mem_info;
 
@@ -473,38 +474,32 @@ void kstd_mem_print_blocks(void)
 {
     MEMORY_BLOCK *__BLOCK = MEM_HEAD;
 
-	char *_str;
+    int __block_count = 0;
 
-	kstd_itoa(_str, 10, sizeof(MEMORY_BLOCK));
+    char *_size;
+    char *_free;
 
-    kstd_report("Block size: ");
-    kstd_report(_str);
-
-    while (MEM_HEAD != NULL)
+    while (__BLOCK != NULL)
     {
-		char *_size;
-		char *_free;
-		char *_data;
-		char *_curr;
-		char *_next;
+        kstd_itoa(_size, 10, __BLOCK->meta.size);
+        kstd_itoa(_free, 10, __BLOCK->meta.is_free);
 
-		kstd_itoa(_size, 10, __BLOCK->meta.size);
-		kstd_itoa(_free, 10, __BLOCK->meta.is_free);
-		kstd_itoa(_data, 16, (int)__BLOCK->__data);
-		kstd_itoa(_curr, 16, (int)__BLOCK);
-		kstd_itoa(_next, 16, (int)__BLOCK->__next);
+        kstd_write("Size: ");
+        kstd_write(_size);
+        kstd_write("\nFree: ");
+        kstd_write(_free);
+        kstd_write("\n\n");
 
-		kstd_report("Size: ");
-		kstd_report(_size);
-		kstd_report("\nFree: ");
-		kstd_report(_free);
-		kstd_report("\nData: ");
-		kstd_report(_data);
-		kstd_report("\nCurr: ");
-		kstd_report(_curr);
-		kstd_report("\nNext: ");
-		kstd_report(_next);
+        __BLOCK = __BLOCK->__next;
 
-        MEM_HEAD = MEM_HEAD->__next;
+        __block_count++;
     }
+
+    char *_bcs;
+
+    kstd_itoa(_bcs, 10, __block_count);
+
+    kstd_write("Total block count: ");
+    kstd_write(_bcs);
+    kstd_write("\n");
 }
