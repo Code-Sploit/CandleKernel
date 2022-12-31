@@ -64,6 +64,12 @@ char kstd_tolower(char __c);
 
 int kstd_cmatch(char __c1, char __c2);
 
-int kstd_strcmp(char *__s1, char *__s2);
+int __kstd_strcmp(char __s1[], char __s2[]);
+
+int __kstd_strlen(const char *__sptr);
+
+void __kstd_append_char_to_string(char *__sptr, char c);
+
+BOOL __kstd_is_backspace_valid(char *__sptr);
 
 #endif
