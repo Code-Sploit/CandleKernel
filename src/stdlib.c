@@ -57,8 +57,6 @@ int kstd_mem_init(void *__START_ADDR, void *__END_ADDR)
 {
 	if (G_MEMORY_START_ADDR > G_MEMORY_END_ADDR)
 	{
-		kstd_panic("Failed to initialize memory!\n");
-
 		return -1;
 	}
 
@@ -324,7 +322,7 @@ int __kstd_strcmp(char __s1[], char __s2[])
 	return __s1[i] - __s2[i];
 }
 
-int __kstd_strlen(char *__sptr)
+int __kstd_strlen(const char *__sptr)
 {
 	int len = 0;
 
