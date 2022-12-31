@@ -88,7 +88,7 @@ typedef struct {
 
 typedef void (*isr_t)(registers_t *);
 
-void __kstd_isr_enable(void);
+int __kstd_isr_enable(void);
 void __kstd_isr_handler(registers_t *__regs);
 
 void __kstd_register_interrupt_handler(uint8 __index, isr_t __handler);
