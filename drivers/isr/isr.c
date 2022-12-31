@@ -44,7 +44,7 @@ char *__kstd_isr_exceptions[] = {
         "Reserved"
 };
 
-void __kstd_isr_enable() {
+int __kstd_isr_enable() {
     __kstd_set_idt_gate(0, (uint32) isr0);
     __kstd_set_idt_gate(1, (uint32) isr1);
     __kstd_set_idt_gate(2, (uint32) isr2);
@@ -110,7 +110,9 @@ void __kstd_isr_enable() {
 
     __kstd_load_idt(); // Load with ASM
 
-    //asm volatile("sti"); // Enable interrupts
+    asm volatile("sti");
+
+    return 0;
 }
 
 void __kstd_register_interrupt_handler(uint8 __index, isr_t __handler) {
