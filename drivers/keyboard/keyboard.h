@@ -8,6 +8,6 @@
 
 static char __kstd_keyboard_buffer[256];
 
-void __kstd_enable_keyboard(void);
+int __kstd_enable_keyboard(void);
 
 #endif
