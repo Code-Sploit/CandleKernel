@@ -13,6 +13,7 @@
 #include "../drivers/keyboard/keyboard.h"
 
 #include "../drivers/gdt/mgdt.h"
+#include "../drivers/ext2/ext2.h"
 
 #define assert(condition) (condition == 0) ? 0 : 1
 
@@ -54,6 +55,9 @@ void kmain(void)
 	kstd_write("Initializing IDE...");
 
 	__asr_status = assert(__ide_status == 0); (__asr_status) != 0 ? kstd_writec("[Done]\n", ATTR_BYTE_GRN_ON_BLK) : kstd_writec("[Failed]\n", ATTR_BYTE_RED_ON_BLK);
+
+	__kstd_ext2_read_superblock();
+	__kstd_ext2_init();
 
 	kstd_write("\nSuccessfully booted: CandleOS!\n");
 	kstd_write("\nroot@candleos > ");

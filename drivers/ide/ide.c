@@ -381,7 +381,7 @@ int __kstd_ide_initialize(unsigned int __BAR0, unsigned int __BAR1, unsigned int
 }
 
 unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __drive, unsigned int __lba,
-                                    unsigned char __nsectors, unsigned short __selector, unsigned int __edi)
+                                    unsigned char __nsectors, unsigned int __buffer)
 {
     unsigned char __lba_io[6];
     unsigned char __lba_mode;
@@ -501,7 +501,7 @@ unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __d
     }
     else
     {
-        if (__direction == 0)
+        if (__direction == ATA_READ)
         {
             /* PIO Read. */
 
@@ -513,11 +513,23 @@ unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __d
                 }
 
                 asm volatile ("pushw %es");
-                asm volatile ("mov %%ax, %%ds"::"a"(__selector));
-                asm volatile ("rep outsw"::"c"(__words), "d"(__bus), "S"(__edi));
+                asm volatile ("rep insw"::"c"(__words), "d"(__bus), "D"(__buffer));
+                asm volatile ("popw %es");
+
+                __buffer = (__buffer + (__words * 2));
+            }
+        }
+        else
+        {
+            for (i = 0; i < __nsectors; i++)
+            {
+                __kstd_ide_polling_channel(__channel, 0);
+
+                asm volatile ("pushw %ds");
+                asm volatile ("rep outsw" ::"c"(__words), "d"(__bus), "S"(__buffer));
                 asm volatile ("popw %ds");
 
-                __edi = (__edi + (__words * 2));
+                __buffer = (__buffer + (__words * 2));
             }
 
             __kstd_ide_write_channel(__channel, ATA_REG_COMMAND, (char[]) {ATA_CMD_CACHE_FLUSH, ATA_CMD_CACHE_FLUSH, ATA_CMD_CACHE_FLUSH_EXT}[__lba_mode]);
@@ -604,39 +616,7 @@ unsigned char __kstd_ide_atapi_read(unsigned char __drive, unsigned int __lba, u
     return 0;
 }
 
-void __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba,
-                             unsigned short __es, unsigned int __edi)
-{
-    if (__drive > 3 || __kstd_ide_devices[__drive].__reserved == 0)
-    {
-        __kstd_ide_package[0] = 0x1; 
-    }
-    else if (((__lba + __nsectors) > __kstd_ide_devices[__drive].__size) && (__kstd_ide_devices[__drive].__type == IDE_ATA))
-    {
-        __kstd_ide_package[0] = 0x2;
-    }
-    else
-    {
-        unsigned char __err;
-
-        if (__kstd_ide_devices[__drive].__type == IDE_ATA)
-        {
-            __err = __kstd_ide_ata_access(ATA_READ, __drive, __lba, __nsectors, __es, __edi);
-        }
-        else if (__kstd_ide_devices[__drive].__type == IDE_ATAPI)
-        {
-            for (int i = 0; i < __nsectors; i++)
-            {
-                __err = __kstd_ide_atapi_read(__drive, __lba + i, 1, __es, __edi + (i * 2048));
-            }
-        }
-
-        __kstd_ide_package[0] = __kstd_ide_print_error(__drive, __err);
-    }
-}
-
-void __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba,
-                              unsigned short __es, unsigned int __edi)
+int __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer)
 {
     if (__drive > 3 || __kstd_ide_devices[__drive].__reserved == 0)
     {
@@ -652,7 +632,32 @@ void __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, u
 
         if (__kstd_ide_devices[__drive].__type == IDE_ATA)
         {
-            __err = __kstd_ide_ata_access(ATA_WRITE, __drive, __lba, __nsectors, __es, __edi);
+            __err = __kstd_ide_ata_access(ATA_READ, __drive, __lba, __nsectors, __buffer);
+        }
+
+        __kstd_ide_package[0] = __kstd_ide_print_error(__drive, __err);
+    }
+
+    return 0;
+}
+
+void __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer)
+{
+    if (__drive > 3 || __kstd_ide_devices[__drive].__reserved == 0)
+    {
+        __kstd_ide_package[0] = 0x1;
+    }
+    else if (((__lba + __nsectors) > __kstd_ide_devices[__drive].__size) && (__kstd_ide_devices[__drive].__type == IDE_ATA))
+    {
+        __kstd_ide_package[0] = 0x2;
+    }
+    else
+    {
+        unsigned char __err;
+
+        if (__kstd_ide_devices[__drive].__type == IDE_ATA)
+        {
+            __err = __kstd_ide_ata_access(ATA_WRITE, __drive, __lba, __nsectors, __buffer);
         }
         else if (__kstd_ide_devices[__drive].__type == IDE_ATAPI)
         {

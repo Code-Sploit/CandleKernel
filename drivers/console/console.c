@@ -4,6 +4,8 @@
 #include "../../lib/stdlib.h"
 #include "../../lib/stdio.h"
 
+#include "../ext2/ext2.h"
+
 #include "../keyboard/keyboard.h"
 
 void __kstd_execute_shutdown(void)
@@ -42,6 +44,17 @@ void __kstd_execute_print_mem_blocks(void)
     kstd_mem_print_blocks();
 }
 
+void __kstd_execute_read(void)
+{
+    char *__fdata = kstd_mem_malloc(sizeof(*__fdata));
+
+    __fdata = __kstd_ext2_read_file("hello.txt");
+
+    kstd_write("File: [hello.txt]\n");
+    kstd_write(__fdata);
+    kstd_write("\n");
+}
+
 void __kstd_console_run(char *__cmd)
 {
     if (__kstd_strcmp(__cmd, __COMMAND_HALT) == 0)
@@ -63,6 +76,10 @@ void __kstd_console_run(char *__cmd)
     else if (__kstd_strcmp(__cmd, __COMMAND_CLEAR) == 0)
     {
         __kstd_execute_clear();
+    }
+    else if (__kstd_strcmp(__cmd, __COMMAND_READ) == 0)
+    {
+        __kstd_execute_read();
     }
     else
     {

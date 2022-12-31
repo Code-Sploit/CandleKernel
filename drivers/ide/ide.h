@@ -124,15 +124,12 @@ unsigned char __kstd_ide_polling_channel(unsigned char __channel, unsigned int _
 unsigned char __kstd_ide_print_error(unsigned int __drive, unsigned char __err);
 
 unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __drive, unsigned int __lba,
-                                    unsigned char __nsectors, unsigned short __selector, unsigned int __edi);
+                                    unsigned char __nsectors, unsigned int __buffer);
 
 unsigned char __kstd_ide_atapi_read(unsigned char __drive, unsigned int __lba, unsigned char __nsectors,
                                     unsigned short __selector, unsigned int __edi);
 
-void __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba,
-                             unsigned short __es, unsigned int __edi);
-
-void __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba,
-                              unsigned short __es, unsigned int __edi);
+int __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer);
+void __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer);
 
 #endif

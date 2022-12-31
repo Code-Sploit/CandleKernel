@@ -92,14 +92,32 @@ typedef struct __kstd_ext2_dirent
     char *__dname;
 } __kstd_ext2_dirent;
 
-__kstd_ext2_superblock *__kstd_ext2_head_sb;
+uint32 __kstd_ext2_find_in_dir(uint32 __inode_n, char *__dname);
 
 void __kstd_ext2_read_superblock(void);
+
 void __kstd_ext2_init(void);
 
 char *__kstd_ext2_read_file(char *__fpath);
-char **__kstd_ext2_flist(uint32 __inode_num);
+
+char **__kstd_ext2_flist(uint32 __inode_n);
 
 uint32 __kstd_ext2_path_to_inode(char *__path);
+
+void __kstd_ext2_getdata(char *__data, uint32 __len, uint32 __start, uint32 *__sender);
+
+char *__kstd_ext2_get_filedata(uint32 __inode_n);
+
+__kstd_ext2_inode *__kstd_ext2_read_inode(uint32 __inode);
+
+__kstd_ext2_bgdt *__kstd_ext2_parse_bgdt(uint32 __gblock);
+
+__kstd_ext2_dirent __kstd_ext2_read_dirent(uint32 *__data, uint32 __index);
+
+uint32 __kstd_ext2_get_inode_index(uint32 __inode);
+
+uint32 __kstd_ext2_determine_blk_group(uint32 __inode);
+
+static int __kstd_ext2_lba_to_block(int __block);
 
 #endif

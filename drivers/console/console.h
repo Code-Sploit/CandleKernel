@@ -6,6 +6,7 @@
 #define __COMMAND_HELP "HELP"
 #define __COMMAND_PRINT_BLOCKS "MPRINT"
 #define __COMMAND_CLEAR "CLEAR"
+#define __COMMAND_READ "CAT"
 
 void __kstd_execute_shutdown(void);
 
