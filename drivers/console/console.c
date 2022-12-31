@@ -15,13 +15,18 @@ void __kstd_execute_shutdown(void)
 void __kstd_execute_reboot(void)
 {
     kstd_write("\nSystem rebooting!\n");
-    kstd_write("\nClearing keyboard buffer!\n");
-
-    __kstd_keyboard_buffer[0] = '\0';
 
     uint64 null_idtr = 0;
     
     asm("xor %%eax, %%eax; lidt %0; int3" :: "m" (null_idtr));
+}
+
+void __kstd_execute_help(void)
+{
+    kstd_write("\nHelp window:\n");
+    kstd_write("HELP: Displays this help message.\n");
+    kstd_write("HALT: Halts the CPU.\n");
+    kstd_write("REBOOT: Reboots the system.\n");
 }
 
 void __kstd_console_run(char *__cmd)
@@ -33,6 +38,10 @@ void __kstd_console_run(char *__cmd)
     else if (__kstd_strcmp(__cmd, __COMMAND_REBOOT) == 0)
     {
         __kstd_execute_reboot();
+    }
+    else if (__kstd_strcmp(__cmd, __COMMAND_HELP) == 0)
+    {
+        __kstd_execute_help();
     }
     else
     {

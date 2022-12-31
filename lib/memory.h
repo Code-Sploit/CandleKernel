@@ -16,6 +16,34 @@ typedef struct KSTD_MEM_INFO {
     uint32 *__mem_map_array;
 } KSTD_MEM_INFO;
 
+typedef struct memory_block {
+    struct {
+        uint32 size;  // memory size
+        uint8 is_free; // block is free or not
+    } meta;
+
+    struct memory_block *__next;
+
+    void *__data;  // data pointer
+} __attribute__((packed)) MEMORY_BLOCK;
+
+/* Stdlib memory function */
+
+BOOL kstd_mem_isfree(MEMORY_BLOCK *__BLOCK);
+
+MEMORY_BLOCK *kstd_mem_worst(int __SIZE);
+
+int kstd_mem_init(void *__START_ADDR, void *__END_ADDR);
+
+void *kstd_mem_brk(int __SIZE);
+void *kstd_mem_malloc(int __SIZE);
+void *kstd_mem_calloc(int __N, int __SIZE);
+void *kstd_mem_realloc(void *__PTR, int __SIZE);
+
+void kstd_mem_free(void *__ADDR);
+
+void kstd_itoa(char *__BUF, int __BASE, int __D);
+
 void *kstd_memcpy(void *__DEST, const void *__SOURCE, uint32 __N);
 void *kstd_memset(void *__DEST, char __C, uint32 __N);
 

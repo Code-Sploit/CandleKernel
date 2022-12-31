@@ -28,34 +28,6 @@ typedef enum {
     TRUE
 } BOOL;
 
-typedef struct memory_block {
-    struct {
-        uint32 size;  // memory size
-        uint8 is_free; // block is free or not
-    } meta;
-
-    struct memory_block *__next;
-
-    void *__data;  // data pointer
-} __attribute__((packed)) MEMORY_BLOCK;
-
-/* Stdlib memory function */
-
-BOOL kstd_mem_isfree(MEMORY_BLOCK *__BLOCK);
-
-MEMORY_BLOCK *kstd_mem_worst(int __SIZE);
-
-int kstd_mem_init(void *__START_ADDR, void *__END_ADDR);
-
-void *kstd_mem_brk(int __SIZE);
-void *kstd_mem_malloc(int __SIZE);
-void *kstd_mem_calloc(int __N, int __SIZE);
-void *kstd_mem_realloc(void *__PTR, int __SIZE);
-
-void kstd_mem_free(void *__ADDR);
-
-void kstd_itoa(char *__BUF, int __BASE, int __D);
-
 int kstd_isupper(char __c);
 int kstd_islower(char __c);
 

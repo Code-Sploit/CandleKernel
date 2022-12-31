@@ -1,3 +1,5 @@
+#include "../lib/memory.h"
+
 #include "../lib/stdproc.h"
 #include "../lib/stdlib.h"
 #include "../lib/stdio.h"
