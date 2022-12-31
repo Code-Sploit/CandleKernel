@@ -1,29 +1,20 @@
+;Load the Global Descriptor Table
 
-gdt_start:
-    dd 0x0 ; 4 byte
-    dd 0x0 ; 4 byte
+global __kstd_mgdt_load_gdt
+global __kstd_mgdt_load_registers
 
-gdt_code:
-    dw 0xffff
-    dw 0x0
-    db 0x0
-    db 10011010b
-    db 11001111b
-    db 0x0
+__kstd_mgdt_load_gdt:
+	lgdt [esp + 4]
+	ret
 
-gdt_data:
-    dw 0xffff
-    dw 0x0
-    db 0x0
-    db 10010010b
-    db 11001111b
-    db 0x0
+__kstd_mgdt_load_registers:
+	mov ax, 0x10
+	mov ds, ax
+	mov ss, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+	jmp 0x08:flush_cs
 
-gdt_end:
-
-gdt_descriptor:
-    dw gdt_end - gdt_start - 1
-    dd gdt_start
-
-CODE_SEG equ gdt_code - gdt_start
-DATA_SEG equ gdt_data - gdt_start
+flush_cs:
+	ret
