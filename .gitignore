@@ -1,0 +1,4 @@
+*.iso
+*.o
+*.elf
+isofiles
