@@ -3,6 +3,8 @@
 
 #define NULL 0
 
+#define assert(condition) (condition == 0) ? 0 : 1
+
 typedef unsigned char uint8;
 typedef unsigned short uint16;
 typedef unsigned int uint32;
