@@ -30,6 +30,8 @@ typedef enum {
     TRUE
 } BOOL;
 
+void kstd_itoa(char *__BUF, int __BASE, int __D);
+
 int kstd_isupper(char __c);
 int kstd_islower(char __c);
 

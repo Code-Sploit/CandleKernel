@@ -5,6 +5,7 @@
 #define __COMMAND_REBOOT "REBOOT"
 #define __COMMAND_HELP "HELP"
 #define __COMMAND_PRINT_BLOCKS "MPRINT"
+#define __COMMAND_CLEAR "CLEAR"
 
 void __kstd_execute_shutdown(void);
 

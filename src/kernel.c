@@ -9,6 +9,7 @@
 
 #include "../drivers/idt/idt.h"
 #include "../drivers/isr/isr.h"
+#include "../drivers/ide/ide.h"
 #include "../drivers/keyboard/keyboard.h"
 
 #include "../drivers/gdt/mgdt.h"
@@ -24,6 +25,7 @@ void kmain(void)
 	int __gdt_status = __kstd_mgdt_enable();
 	int __isr_status = __kstd_isr_enable();
 	int __key_status = __kstd_enable_keyboard();
+	int __ide_status = __kstd_ide_initialize(0x1F0, 0x3F6, 0x170, 0x376, 0x000);
 	int __asr_status = 0;
 
 	kstd_clear();
@@ -49,7 +51,10 @@ void kmain(void)
 
 	__asr_status = assert(__mem_status == 0); (__asr_status) != 0 ? kstd_writec("[Done]\n", ATTR_BYTE_GRN_ON_BLK) : kstd_writec("[Failed]\n", ATTR_BYTE_RED_ON_BLK);
 
-	kstd_write("\nSuccessfully booted: CandleOS!\n");
+	kstd_write("Initializing IDE...");
 
-	kstd_write("\nAwaiting Commands...\nroot@candleos > ");
+	__asr_status = assert(__ide_status == 0); (__asr_status) != 0 ? kstd_writec("[Done]\n", ATTR_BYTE_GRN_ON_BLK) : kstd_writec("[Failed]\n", ATTR_BYTE_RED_ON_BLK);
+
+	kstd_write("\nSuccessfully booted: CandleOS!\n");
+	kstd_write("\nroot@candleos > ");
 }

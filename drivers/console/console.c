@@ -25,9 +25,16 @@ void __kstd_execute_reboot(void)
 void __kstd_execute_help(void)
 {
     kstd_write("\nHelp window:\n");
-    kstd_write("HELP: Displays this help message.\n");
-    kstd_write("HALT: Halts the CPU.\n");
-    kstd_write("REBOOT: Reboots the system.\n");
+    kstd_write("HELP:\t\tDisplays this help message.\n");
+    kstd_write("MPRINT:  Prints current memory allocation table.\n");
+    kstd_write("CLEAR: Clear the screen.\n");
+    kstd_write("HALT: \t Halts the CPU.\n");
+    kstd_write("REBOOT:\tReboots the system.\n");
+}
+
+void __kstd_execute_clear(void)
+{
+    __kstd_vga_clear();
 }
 
 void __kstd_execute_print_mem_blocks(void)
@@ -52,6 +59,10 @@ void __kstd_console_run(char *__cmd)
     else if (__kstd_strcmp(__cmd, __COMMAND_PRINT_BLOCKS) == 0)
     {
         __kstd_execute_print_mem_blocks();
+    }
+    else if (__kstd_strcmp(__cmd, __COMMAND_CLEAR) == 0)
+    {
+        __kstd_execute_clear();
     }
     else
     {

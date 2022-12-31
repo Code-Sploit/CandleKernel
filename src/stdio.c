@@ -14,7 +14,7 @@ void kstd_write(const char *__sptr)
 	int cursor = __kstd_vga_get_cursor();
 
 	while (striter < strlen)
-	{
+	{	
 		__kstd_vga_putchar(__sptr[striter], ATTR_BYTE_TEXT_COLOR_STD);
 		__kstd_vga_set_cursor(VIDEO_POINTER_SIZE);
 

@@ -65,6 +65,11 @@ void __kstd_vga_putchar(char __c, unsigned short __cl)
         return;
     }
 
+    if (VIDEO_POINTER_SIZE >= SCREEN_SIZE)
+    {
+        __kstd_vga_clear();
+    }
+
     if (__c == '\n')
     {
         __kstd_vga_newline();

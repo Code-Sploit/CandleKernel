@@ -28,8 +28,9 @@ gcc -m32 $CFLAGS -c drivers/keyboard/keyboard.c -o $BUILDDIR/keyboard.o
 gcc -m32 $CFLAGS -c drivers/console/console.c -o $BUILDDIR/console.o
 gcc -m32 $CFLAGS -c drivers/gdt/mgdt.c -o $BUILDDIR/mgdt.o
 gcc -m32 $CFLAGS -c drivers/vga/vga.c -o $BUILDDIR/vga.o
+gcc -m32 $CLFAGS -c drivers/ide/ide.c -o $BUILDDIR/ide.o
 
-ld -m elf_i386 -T$CONFDIR/linker.ld -o kernel.elf $BUILDDIR/kernel.o $BUILDDIR/kasm.o $BUILDDIR/stdio.o $BUILDDIR/stdproc.o $BUILDDIR/stdlib.o $BUILDDIR/panic.o $BUILDDIR/memory.o $BUILDDIR/idt.o $BUILDDIR/isr.o $BUILDDIR/pio.o $BUILDDIR/interrupts.o $BUILDDIR/keyboard.o $BUILDDIR/console.o $BUILDDIR/mgdt.o $BUILDDIR/gdt.o $BUILDDIR/vga.o
+ld -m elf_i386 -T$CONFDIR/linker.ld -o kernel.elf $BUILDDIR/kernel.o $BUILDDIR/kasm.o $BUILDDIR/stdio.o $BUILDDIR/stdproc.o $BUILDDIR/stdlib.o $BUILDDIR/panic.o $BUILDDIR/memory.o $BUILDDIR/idt.o $BUILDDIR/isr.o $BUILDDIR/pio.o $BUILDDIR/interrupts.o $BUILDDIR/keyboard.o $BUILDDIR/console.o $BUILDDIR/mgdt.o $BUILDDIR/gdt.o $BUILDDIR/vga.o $BUILDDIR/ide.o
 
 echo "-------"
 echo "Compilation succeeded!"

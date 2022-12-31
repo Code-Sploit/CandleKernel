@@ -470,24 +470,43 @@ void kstd_mem_free(void *__ADDR)
 	}
 }
 
+void tostring(char str[], int num)
+{
+    int i, rem, len = 0, n;
+ 
+    n = num;
+    while (n != 0)
+    {
+        len++;
+        n /= 10;
+    }
+    for (i = 0; i < len; i++)
+    {
+        rem = num % 10;
+        num = num / 10;
+        str[len - (i + 1)] = rem + '0';
+    }
+    str[len] = '\0';
+}
+
 void kstd_mem_print_blocks(void)
 {
     MEMORY_BLOCK *__BLOCK = MEM_HEAD;
 
     int __block_count = 0;
 
-    char *_size;
-    char *_free;
+    char _size[256];
 
     while (__BLOCK != NULL)
     {
         kstd_itoa(_size, 10, __BLOCK->meta.size);
-        kstd_itoa(_free, 10, __BLOCK->meta.is_free);
 
         kstd_write("Size: ");
         kstd_write(_size);
         kstd_write("\nFree: ");
-        kstd_write(_free);
+        
+        assert(__BLOCK->meta.is_free == 0) ? kstd_write("NO") : kstd_write("YES");
+        
         kstd_write("\n\n");
 
         __BLOCK = __BLOCK->__next;
@@ -495,7 +514,7 @@ void kstd_mem_print_blocks(void)
         __block_count++;
     }
 
-    char *_bcs;
+    char _bcs[256];
 
     kstd_itoa(_bcs, 10, __block_count);
 
