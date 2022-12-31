@@ -7,6 +7,8 @@
 
 /* IDE Channel Container Struct */
 
+unsigned short __kstd_ide_package[10];
+
 struct IDEChannelRegisters
 {
     unsigned short __base;
@@ -600,4 +602,125 @@ unsigned char __kstd_ide_atapi_read(unsigned char __drive, unsigned int __lba, u
     }
 
     return 0;
+}
+
+void __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba,
+                             unsigned short __es, unsigned int __edi)
+{
+    if (__drive > 3 || __kstd_ide_devices[__drive].__reserved == 0)
+    {
+        __kstd_ide_package[0] = 0x1; 
+    }
+    else if (((__lba + __nsectors) > __kstd_ide_devices[__drive].__size) && (__kstd_ide_devices[__drive].__type == IDE_ATA))
+    {
+        __kstd_ide_package[0] = 0x2;
+    }
+    else
+    {
+        unsigned char __err;
+
+        if (__kstd_ide_devices[__drive].__type == IDE_ATA)
+        {
+            __err = __kstd_ide_ata_access(ATA_READ, __drive, __lba, __nsectors, __es, __edi);
+        }
+        else if (__kstd_ide_devices[__drive].__type == IDE_ATAPI)
+        {
+            for (int i = 0; i < __nsectors; i++)
+            {
+                __err = __kstd_ide_atapi_read(__drive, __lba + i, 1, __es, __edi + (i * 2048));
+            }
+        }
+
+        __kstd_ide_package[0] = __kstd_ide_print_error(__drive, __err);
+    }
+}
+
+void __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba,
+                              unsigned short __es, unsigned int __edi)
+{
+    if (__drive > 3 || __kstd_ide_devices[__drive].__reserved == 0)
+    {
+        __kstd_ide_package[0] = 0x1;
+    }
+    else if (((__lba + __nsectors) > __kstd_ide_devices[__drive].__size) && (__kstd_ide_devices[__drive].__type == IDE_ATA))
+    {
+        __kstd_ide_package[0] = 0x2;
+    }
+    else
+    {
+        unsigned char __err;
+
+        if (__kstd_ide_devices[__drive].__type == IDE_ATA)
+        {
+            __err = __kstd_ide_ata_access(ATA_WRITE, __drive, __lba, __nsectors, __es, __edi);
+        }
+        else if (__kstd_ide_devices[__drive].__type == IDE_ATAPI)
+        {
+            __err = 4;
+        }
+
+        __kstd_ide_package[0] = __kstd_ide_print_error(__drive, __err);
+    }
+}
+
+void __kstd_ide_atapi_eject(unsigned char __drive)
+{
+    unsigned int __channel  = __kstd_ide_devices[__drive].__channel;
+    unsigned int __childbit = __kstd_ide_devices[__drive].__drive;
+    unsigned int __bus      = __kstd_ide_channels[__channel].__base;
+    unsigned int __words    = (2048 / 2);
+
+    unsigned char __err = 0;
+
+    __kstd_ide_irq_invoked = 0;
+
+    if (__drive > 3 || __kstd_ide_devices[__drive].__reserved == 0)
+    {
+        __kstd_ide_package[0] = 0x1;
+    }
+    else if (__kstd_ide_devices[__drive].__type == IDE_ATA)
+    {
+        __kstd_ide_package[0] = 20;
+    }
+    else
+    {
+        __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, __kstd_ide_channels[__channel].__nint = __kstd_ide_irq_invoked = 0x0);
+
+        __kstd_atapi_packet[0]  = ATAPI_CMD_EJECT;
+        __kstd_atapi_packet[1]  = 0x00;
+        __kstd_atapi_packet[2]  = 0x00;
+        __kstd_atapi_packet[3]  = 0x00;
+        __kstd_atapi_packet[4]  = 0x02;
+        __kstd_atapi_packet[5]  = 0x00;
+        __kstd_atapi_packet[6]  = 0x00;
+        __kstd_atapi_packet[7]  = 0x00;
+        __kstd_atapi_packet[8]  = 0x00;
+        __kstd_atapi_packet[9]  = 0x00;
+        __kstd_atapi_packet[10] = 0x00;
+        __kstd_atapi_packet[11] = 0x00;
+
+        __kstd_ide_write_channel(__channel, ATA_REG_HDDEVSEL, __childbit << 4);
+
+        for (int i = 0; i < 4; i++)
+        {
+            __kstd_ide_read_channel(__channel, ATA_REG_HDDEVSEL);
+        }
+
+        __kstd_ide_write_channel(__channel, ATA_REG_COMMAND, ATA_CMD_PACKET);
+
+        __err = __kstd_ide_polling_channel(__channel, 1);
+
+        asm volatile ("rep outsw"::"c"(6), "d"(__bus), "S"(__kstd_atapi_packet));
+
+        __kstd_ide_irq_trigger();
+
+        __err = __kstd_ide_polling_channel(__channel, 1);
+
+        if (__err == 3)
+        {
+            __err = 0;
+        }
+
+        __kstd_ide_package[0] = __kstd_ide_print_error(__drive, __err);
+    }
 }

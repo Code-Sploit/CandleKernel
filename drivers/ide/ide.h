@@ -109,6 +109,8 @@ volatile unsigned static char __kstd_ide_irq_invoked = 0;
 
 /* Methods */
 
+void __kstd_ide_irq_trigger(void);
+
 void __kstd_ide_insl(unsigned short __register, unsigned int *__buffer_ptr, int __quads);
 void __kstd_ide_outsl(unsigned short __register, unsigned int *__buffer_ptr, int __quads);
 
@@ -127,6 +129,10 @@ unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __d
 unsigned char __kstd_ide_atapi_read(unsigned char __drive, unsigned int __lba, unsigned char __nsectors,
                                     unsigned short __selector, unsigned int __edi);
 
-void __kstd_ide_irq_trigger(void);
+void __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba,
+                             unsigned short __es, unsigned int __edi);
+
+void __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba,
+                              unsigned short __es, unsigned int __edi);
 
 #endif
