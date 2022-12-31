@@ -11,30 +11,45 @@
 #include "../drivers/isr/isr.h"
 #include "../drivers/keyboard/keyboard.h"
 
+#include "../drivers/gdt/mgdt.h"
+
+#define assert(condition) (condition == 0) ? 0 : 1
+
+#define __KSTD_MEMORY_BLOCK_ALLOC 20
+
 void kmain(void)
 {
 	kstd_clear();
-
-	__kstd_isr_enable();
-	asm volatile("sti");
-	__kstd_enable_keyboard();
+	
+	int __gdt_status = __kstd_mgdt_enable();
+	int __isr_status = __kstd_isr_enable();
+	int __key_status = __kstd_enable_keyboard();
+	int __asr_status = 0;
 
 	kstd_clear();
 
-	kstd_write("Initializing VGA buffer... [Done]\n");
-	kstd_write("Initializing ISR handler... [Done]\n");
-	kstd_write("Initializing Keyboard... [Done]\n");
+	kstd_write("Initializing VGA buffer...");
 
-	/* Memory */
+	__asr_status = assert(__gdt_status == 0); (__asr_status) != 0 ? kstd_writec("[Done]\n", ATTR_BYTE_GRN_ON_BLK) : kstd_writec("[Failed]\n", ATTR_BYTE_RED_ON_BLK);
 
-	void *__KSTD_MEM_START_ADDR = kstd_mem_pre_alloc_blocks(20);
+	kstd_write("Initializing ISR handler...");
+	
+	__asr_status = assert(__isr_status == 0); (__asr_status) != 0 ? kstd_writec("[Done]\n", ATTR_BYTE_GRN_ON_BLK) : kstd_writec("[Failed]\n", ATTR_BYTE_RED_ON_BLK);
+	
+	kstd_write("Initializing Keyboard...");
+	
+	__asr_status = assert(__key_status == 0); (__asr_status) != 0 ? kstd_writec("[Done]\n", ATTR_BYTE_GRN_ON_BLK) : kstd_writec("[Failed]\n", ATTR_BYTE_RED_ON_BLK);
+
+	void *__KSTD_MEM_START_ADDR = kstd_mem_pre_alloc_blocks(__KSTD_MEMORY_BLOCK_ALLOC);
 	void *__KSTD_MEM_END_ADDR	= __KSTD_MEM_START_ADDR + (kstd_mem_pre_next_free(1) * KSTD_MEM_BLOCK_SIZE);
 
-	kstd_mem_init(__KSTD_MEM_START_ADDR, __KSTD_MEM_END_ADDR);
+	int __mem_status = kstd_mem_init(__KSTD_MEM_START_ADDR, __KSTD_MEM_END_ADDR);
 
-	kstd_write("Initializing 20 blocks of memory... [Done]\n");
+	kstd_write("Initializing 20 blocks of memory...");
 
-	kstd_write("\nWelcome to CandleOS\nAwaiting Commands...\nroot@candleos > ");
+	__asr_status = assert(__mem_status == 0); (__asr_status) != 0 ? kstd_writec("[Done]\n", ATTR_BYTE_GRN_ON_BLK) : kstd_writec("[Failed]\n", ATTR_BYTE_RED_ON_BLK);
 
-	return;
+	kstd_write("\nSuccessfully booted: CandleOS!\n");
+
+	kstd_write("\nAwaiting Commands...\nroot@candleos > ");
 }
