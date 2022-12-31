@@ -121,4 +121,12 @@ unsigned char __kstd_ide_read_channel(unsigned char __channel, unsigned char __r
 unsigned char __kstd_ide_polling_channel(unsigned char __channel, unsigned int __advanced_check);
 unsigned char __kstd_ide_print_error(unsigned int __drive, unsigned char __err);
 
+unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __drive, unsigned int __lba,
+                                    unsigned char __nsectors, unsigned short __selector, unsigned int __edi);
+
+unsigned char __kstd_ide_atapi_read(unsigned char __drive, unsigned int __lba, unsigned char __nsectors,
+                                    unsigned short __selector, unsigned int __edi);
+
+void __kstd_ide_irq_trigger(void);
+
 #endif

@@ -32,6 +32,16 @@ struct IDEDevice
     unsigned int __size;
 } __kstd_ide_devices[4];
 
+void __kstd_ide_irq_trigger(void)
+{
+    while (!__kstd_ide_irq_invoked)
+    {
+        /* Wait */
+    }
+
+    __kstd_ide_irq_invoked = 0;
+}
+
 void __kstd_ide_insl(unsigned short __register, unsigned int *__buffer_ptr, int __quads)
 {
     int __index;
@@ -363,6 +373,230 @@ int __kstd_ide_initialize(unsigned int __BAR0, unsigned int __BAR1, unsigned int
             kstd_write("GB - ");
             kstd_write(__kstd_ide_devices[i].__model);
         }
+    }
+
+    return 0;
+}
+
+unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __drive, unsigned int __lba,
+                                    unsigned char __nsectors, unsigned short __selector, unsigned int __edi)
+{
+    unsigned char __lba_io[6];
+    unsigned char __lba_mode;
+    unsigned char __dma;
+    unsigned char __cmd;
+
+    unsigned char __head;
+    unsigned char __sect;
+    unsigned char __err;
+
+    unsigned int __channel  = __kstd_ide_devices[__drive].__channel;
+    unsigned int __childbit = __kstd_ide_devices[__drive].__drive;
+    unsigned int __bus      = __kstd_ide_channels[__channel].__base;
+    unsigned int __words    = 256;
+
+    unsigned short __cyl;
+    unsigned short i;
+
+    __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, __kstd_ide_channels[__channel].__nint = (__kstd_ide_irq_invoked = 0x0) + 0x02);
+
+    if (__lba >= 0x10000000)
+    {
+        __lba_mode = 2;
+
+        __lba_io[0] = (__lba & 0x000000FF) >> 0;
+        __lba_io[1] = (__lba & 0x0000FF00) >> 8;
+        __lba_io[2] = (__lba & 0x00FF0000) >> 16;
+        __lba_io[3] = (__lba & 0xFF000000) >> 24;
+        __lba_io[4] = 0;
+        __lba_io[5] = 0;
+        __head      = 0;
+    }
+    else if (__kstd_ide_devices[__drive].__capabilities & 0x200)
+    {
+        __lba_mode = 0;
+
+        __lba_io[0] = (__lba & 0x00000FF) >> 0;
+        __lba_io[1] = (__lba & 0x000FF00) >> 8;
+        __lba_io[2] = (__lba & 0x0FF0000) >> 16;
+        __lba_io[3] = 0;
+        __lba_io[4] = 0;
+        __lba_io[5] = 0;
+        __head      = (__lba & 0xF000000) >> 24;
+    }
+    else
+    {
+        __lba_mode = 0;
+
+        __sect = (__lba % 63) + 1;
+        __cyl = (__lba + 1 - __sect) / (16 * 63);
+
+        __lba_io[0] = __sect;
+        __lba_io[1] = (__cyl >> 0) & 0xFF;
+        __lba_io[2] = (__cyl >> 8) & 0xFF;
+        __lba_io[3] = 0;
+        __lba_io[4] = 0;
+        __lba_io[5] = 0;
+
+        __head      = (__lba + 1 - __sect) % (16 * 63) / 63;
+    }
+
+    __dma = 0;
+
+    while (__kstd_ide_read_channel(__channel, ATA_REG_STATUS) & ATA_SR_BSY)
+    {
+        /* Wait if busy */
+    }
+
+    if (__lba_mode == 0)
+    {
+        __kstd_ide_write_channel(__channel, ATA_REG_HDDEVSEL, 0xA0 | (__childbit << 4) | __head);
+    }
+    else
+    {
+        __kstd_ide_write_channel(__channel, ATA_REG_HDDEVSEL, 0xE0 | (__childbit << 4) | __head);
+    }
+
+    if (__lba_mode == 2)
+    {
+        __kstd_ide_write_channel(__channel, ATA_REG_SECCOUNT1, 0);
+        __kstd_ide_write_channel(__channel, ATA_REG_LBA3, __lba_io[3]);
+        __kstd_ide_write_channel(__channel, ATA_REG_LBA4, __lba_io[4]);
+        __kstd_ide_write_channel(__channel, ATA_REG_LBA5, __lba_io[5]);
+    }
+
+    __kstd_ide_write_channel(__channel, ATA_REG_SECCOUNT0, __nsectors);
+
+    __kstd_ide_write_channel(__channel, ATA_REG_LBA0, __lba_io[0]);
+    __kstd_ide_write_channel(__channel, ATA_REG_LBA1, __lba_io[1]);
+    __kstd_ide_write_channel(__channel, ATA_REG_LBA2, __lba_io[2]);
+
+    if (__lba_mode == 0 && __dma == 0 && __direction == 0) __cmd = ATA_CMD_READ_PIO;
+    if (__lba_mode == 1 && __dma == 0 && __direction == 0) __cmd = ATA_CMD_READ_PIO;   
+    if (__lba_mode == 2 && __dma == 0 && __direction == 0) __cmd = ATA_CMD_READ_PIO_EXT;   
+    if (__lba_mode == 0 && __dma == 1 && __direction == 0) __cmd = ATA_CMD_READ_DMA;
+    if (__lba_mode == 1 && __dma == 1 && __direction == 0) __cmd = ATA_CMD_READ_DMA;
+    if (__lba_mode == 2 && __dma == 1 && __direction == 0) __cmd = ATA_CMD_READ_DMA_EXT;
+    if (__lba_mode == 0 && __dma == 0 && __direction == 1) __cmd = ATA_CMD_WRITE_PIO;
+    if (__lba_mode == 1 && __dma == 0 && __direction == 1) __cmd = ATA_CMD_WRITE_PIO;
+    if (__lba_mode == 2 && __dma == 0 && __direction == 1) __cmd = ATA_CMD_WRITE_PIO_EXT;
+    if (__lba_mode == 0 && __dma == 1 && __direction == 1) __cmd = ATA_CMD_WRITE_DMA;
+    if (__lba_mode == 1 && __dma == 1 && __direction == 1) __cmd = ATA_CMD_WRITE_DMA;
+    if (__lba_mode == 2 && __dma == 1 && __direction == 1) __cmd = ATA_CMD_WRITE_DMA_EXT;
+    
+    __kstd_ide_write_channel(__channel, ATA_REG_COMMAND, __cmd);
+
+    if (__dma)
+    {
+        if (__direction == 0)
+        {
+            /* DMA Read. */
+        }
+        else
+        {
+            /* DMA Write. */
+        }
+    }
+    else
+    {
+        if (__direction == 0)
+        {
+            /* PIO Read. */
+
+            for (i = 0; i < __nsectors; i++)
+            {
+                if (__err = __kstd_ide_polling_channel(__channel, 1))
+                {
+                    return __err;
+                }
+
+                asm volatile ("pushw %es");
+                asm volatile ("mov %%ax, %%ds"::"a"(__selector));
+                asm volatile ("rep outsw"::"c"(__words), "d"(__bus), "S"(__edi));
+                asm volatile ("popw %ds");
+
+                __edi = (__edi + (__words * 2));
+            }
+
+            __kstd_ide_write_channel(__channel, ATA_REG_COMMAND, (char[]) {ATA_CMD_CACHE_FLUSH, ATA_CMD_CACHE_FLUSH, ATA_CMD_CACHE_FLUSH_EXT}[__lba_mode]);
+
+            __kstd_ide_polling_channel(__channel, 0);
+        }
+    }
+
+    return 0;
+}
+
+unsigned char __kstd_ide_atapi_read(unsigned char __drive, unsigned int __lba, unsigned char __nsectors,
+                                    unsigned short __selector, unsigned int __edi)
+{
+    unsigned int __channel  = __kstd_ide_devices[__drive].__channel;
+    unsigned int __childbit = __kstd_ide_devices[__drive].__drive;
+
+    unsigned int __bus      = __kstd_ide_channels[__channel].__base;
+    unsigned int __words    = 1024;
+    
+    unsigned char __err;
+
+    int i;
+
+    __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, __kstd_ide_channels[__channel].__nint = __kstd_ide_irq_invoked = 0x0);
+
+    __kstd_atapi_packet[0]  = ATAPI_CMD_READ;
+    __kstd_atapi_packet[1]  = 0x0;
+    __kstd_atapi_packet[2]  = (__lba >> 24) & 0xFF;
+    __kstd_atapi_packet[3]  = (__lba >> 16) & 0xFF;
+    __kstd_atapi_packet[4]  = (__lba >> 8)  & 0xFF;
+    __kstd_atapi_packet[5]  = (__lba >> 0)  & 0xFF;
+    __kstd_atapi_packet[6]  = 0x0;
+    __kstd_atapi_packet[7]  = 0x0;
+    __kstd_atapi_packet[8]  = 0x0;
+    __kstd_atapi_packet[9]  = __nsectors;
+    __kstd_atapi_packet[10] = 0x0;
+    __kstd_atapi_packet[11] = 0x0;
+
+    __kstd_ide_write_channel(__channel, ATA_REG_HDDEVSEL, __childbit << 4);
+
+    for (int i = 0; i < 4; i++)
+    {
+        __kstd_ide_read_channel(__channel, ATA_REG_HDDEVSEL);
+    }
+
+    __kstd_ide_write_channel(__channel, ATA_REG_FEATURES, 0);
+    __kstd_ide_write_channel(__channel, ATA_REG_LBA1, (__words * 2) & 0xFF);
+    __kstd_ide_write_channel(__channel, ATA_REG_LBA2, (__words * 2) >> 8);
+
+    __kstd_ide_write_channel(__channel, ATA_REG_COMMAND, ATA_CMD_PACKET);
+
+    if (__err = __kstd_ide_polling_channel(__channel, 1))
+    {
+        return __err;
+    }
+
+    asm volatile ("rep outsw" : : "c"(6), "d"(__bus), "S"(__kstd_atapi_packet));
+
+    for (i = 0; i < __nsectors; i++)
+    {
+        __kstd_ide_irq_trigger();
+
+        if (__err = __kstd_ide_polling_channel(__channel, 1))
+        {
+            return __err;
+        }
+
+        asm volatile ("pushw %es");
+        asm volatile ("mov %%ax, %%es"::"a"(__selector));
+        asm volatile ("rep insw"::"c"(__words), "d"(__bus), "D"(__edi));
+        asm volatile ("popw %es");
+
+        __edi = (__edi + (__words * 2));
+    }
+
+    __kstd_ide_irq_trigger();
+
+    while (__kstd_ide_read_channel(__channel, ATA_REG_STATUS) & (ATA_SR_BSY | ATA_SR_DRQ))
+    {
+        /* Wait */
     }
 
     return 0;
