@@ -28,12 +28,12 @@ static void __kstd_keyboard_callback(registers_t *__regs)
     if (__scode == BACKSPACE) {
         if (__kstd_is_backspace_valid(__kstd_keyboard_buffer))
         {
-            kstd_putchar('\b');
+            __kstd_vga_backspace();
         }
     }
     else if (__scode == ENTER)
     {
-        kstd_newline();
+        __kstd_vga_newline();
         
         __kstd_console_run(__kstd_keyboard_buffer);
 
@@ -48,11 +48,13 @@ static void __kstd_keyboard_callback(registers_t *__regs)
 
         __kstd_append_char_to_string(__kstd_keyboard_buffer, __ch);;
 
-        kstd_write(__str);
+        __kstd_vga_putchar(__ch, ATTR_BYTE_TEXT_COLOR_STD);
     }
 }
 
-void __kstd_enable_keyboard(void)
+int __kstd_enable_keyboard(void)
 {
     __kstd_register_interrupt_handler(IRQ1, __kstd_keyboard_callback);
+
+    return 0;
 }
