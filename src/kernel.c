@@ -26,7 +26,7 @@ void kmain(void)
 	int __gdt_status = __kstd_mgdt_enable();
 	int __isr_status = __kstd_isr_enable();
 	int __key_status = __kstd_enable_keyboard();
-	int __ide_status = __kstd_ide_initialize(0x1F0, 0x3F6, 0x170, 0x376, 0x000);
+	int __ide_status = __kstd_ide_ata_initialize();
 	int __asr_status = 0;
 
 	kstd_clear();

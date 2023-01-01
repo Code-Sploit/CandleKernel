@@ -100,6 +100,11 @@
 #define ATA_READ           0x00
 #define ATA_WRITE          0x01
 
+/* LBA Modes */
+#define LBA_MODE_48   0x02
+#define LBA_MODE_28   0x01
+#define LBA_MODE_CHS  0x00
+
 /* IDE Buffer */
 
 unsigned static char __kstd_ide_buf[2048]    = {0};
@@ -109,27 +114,28 @@ volatile unsigned static char __kstd_ide_irq_invoked = 0;
 
 /* Methods */
 
-void __kstd_ide_irq_trigger(void);
+static unsigned char __kstd_ide_read_channel(unsigned char __channel, unsigned char __reg);
+static void __kstd_ide_write_channel(unsigned char __channel, unsigned char __reg, unsigned char __data);
 
 void __kstd_ide_insl(unsigned short __register, unsigned int *__buffer_ptr, int __quads);
 void __kstd_ide_outsl(unsigned short __register, unsigned int *__buffer_ptr, int __quads);
 
-int __kstd_ide_initialize(unsigned int __BAR0, unsigned int __BAR1, unsigned int __BAR2, unsigned int __BAR3, unsigned int __BAR4);
+void __kstd_ide_read_buffer(unsigned char __channel, unsigned char __reg, unsigned int *__buffer, unsigned int __quads);
+void __kstd_ide_write_buffer(unsigned char __channel, unsigned char __reg, unsigned int *__buffer, unsigned int __quads);
 
-void __kstd_ide_write_channel(unsigned char __channel, unsigned char __register, unsigned char __data);
-void __kstd_ide_read_buffer(unsigned char __channel, unsigned char __register, unsigned int *__buffer, unsigned int __quads);
-
-unsigned char __kstd_ide_read_channel(unsigned char __channel, unsigned char __register);
-unsigned char __kstd_ide_polling_channel(unsigned char __channel, unsigned int __advanced_check);
+unsigned char __kstd_ide_polling_channel(unsigned char __channel, unsigned char __deepcheck);
 unsigned char __kstd_ide_print_error(unsigned int __drive, unsigned char __err);
 
-unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __drive, unsigned int __lba,
-                                    unsigned char __nsectors, unsigned int __buffer);
+void __kstd_ide_initialize(unsigned int __PC1, unsigned int __PCC1, unsigned int __PC2, unsigned int __PCC2, unsigned int __BUS);
 
-unsigned char __kstd_ide_atapi_read(unsigned char __drive, unsigned int __lba, unsigned char __nsectors,
-                                    unsigned short __selector, unsigned int __edi);
+unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __drive, unsigned int __lba, unsigned char __nsectors, unsigned int __buffer);
+
+void __kstd_ide_waitfor_irq(void);
+void __kstd_ide_irq(void);
 
 int __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer);
-void __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer);
+int __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer);
+
+int __kstd_ide_ata_initialize(void);
 
 #endif
