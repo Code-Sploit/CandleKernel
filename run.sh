@@ -37,4 +37,7 @@ echo "-------"
 echo "Compilation succeeded!"
 echo "-------"
 
-qemu-system-i386 -kernel kernel.elf
+cp kernel.elf isofiles/boot
+grub-mkrescue -o candleos.iso isofiles
+
+sh qemu.sh

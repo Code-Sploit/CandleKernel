@@ -2,6 +2,9 @@
 
 #include "../pio/pio.h"
 
+#include "../../lib/memory.h"
+#include "../../lib/stdio.h"
+
 struct IDEChannelRegisters
 {
     unsigned short __base;
@@ -228,55 +231,60 @@ unsigned char __kstd_ide_polling_channel(unsigned char __channel, unsigned char 
 
 unsigned char __kstd_ide_print_error(unsigned int __drive, unsigned char __err)
 {
-    if (__err = 0)
-    {
+    if (__err == 0)
         return __err;
-    }
 
-    kstd_write("IDE: ");
-
-    if (__err == 1)
-    {
-        kstd_write("- Device Fault\n ");
-        
+    kstd_write("IDE:");
+    if (__err == 1) {
+        kstd_write("- Device Fault\n");
         __err = 19;
-    }
-    else if (__err == 2)
-    {
-        unsigned char __st = __kstd_ide_read_channel(__kstd_ide_devices[__drive].__channel, ATA_REG_ERROR);
-
-        if (__st & ATA_ER_AMNF)     {kstd_write("- No Address Mark Found\n"); __err = 7;}
-        if (__st & ATA_ER_TK0NF)    {kstd_write("- No Media or Media Error\n"); __err = 3;}
-        if (__st & ATA_ER_ABRT)     {kstd_write("- Command Aborted\n"); __err = 20;}
-        if (__st & ATA_ER_MCR)      {kstd_write("- No Media or Media Error\n"); __err = 3;}
-        if (__st & ATA_ER_IDNF)     {kstd_write("- ID Mark Not Found\n"); __err = 21;}
-        if (__st & ATA_ER_MC)       {kstd_write("- No Media or Media Error\n"); __err = 3;}
-        if (__st & ATA_ER_UNC)      {kstd_write("- Uncorrectable Data Error\n"); __err = 22;}
-        if (__st & ATA_ER_BBK)      {kstd_write("- Bad Sectors\n"); __err = 13;}
-    }
-    else if (__err == 3)
-    {
-        kstd_write("- Nil read\n");
-        
+    } else if (__err == 2) {
+        uint8 st = __kstd_ide_read_channel(__kstd_ide_devices[__drive].__channel, ATA_REG_ERROR);
+        if (st & ATA_ER_AMNF) {
+            kstd_write("- No Address Mark Found\n");
+            __err = 7;
+        }
+        if (st & ATA_ER_TK0NF) {
+            kstd_write("- No Media or Media Error\n");
+            __err = 3;
+        }
+        if (st & ATA_ER_ABRT) {
+            kstd_write("- Command Aborted\n");
+            __err = 20;
+        }
+        if (st & ATA_ER_MCR) {
+            kstd_write("- No Media or Media Error\n");
+            __err = 3;
+        }
+        if (st & ATA_ER_IDNF) {
+            kstd_write("- ID mark not Found\n");
+            __err = 21;
+        }
+        if (st & ATA_ER_MC) {
+            kstd_write("- No Media or Media Error\n");
+            __err = 3;
+        }
+        if (st & ATA_ER_UNC) {
+            kstd_write("- Uncorrectable Data Error\n");
+            __err = 22;
+        }
+        if (st & ATA_ER_BBK) {
+            kstd_write("- Bad Sectors\n");
+            __err = 13;
+        }
+    } else if (__err == 3) {
+        kstd_write("- Reads Nothing\n");
         __err = 23;
-    }
-    else if (__err = 4)
-    {
+    } else if (__err == 4) {
         kstd_write("- Write Protected\n");
-
         __err = 8;
     }
-
-    kstd_write(" - [");
-
-    kstd_write((const char *[]) {"Primary ", "Secondary "}[__kstd_ide_devices[__drive].__channel]);
-    kstd_write((const char *[]) {"Main", "Child"}[__kstd_ide_devices[__drive].__drive]);
-
-    kstd_write("] ");
-
+    kstd_write(
+           (const char *[]){"Primary", "Secondary"}[__kstd_ide_devices[__drive].__channel]);
+    kstd_write(" ");
+    kstd_write((const char *[]){"Master", "Slave"}[__kstd_ide_devices[__drive].__drive]);
+    kstd_write(" ");
     kstd_write(__kstd_ide_devices[__drive].__model);
-
-    kstd_write("\n");
 
     return __err;
 }
@@ -320,7 +328,7 @@ void __kstd_ide_initialize(unsigned int __PC1, unsigned int __PCC1, unsigned int
             {
                 __status = __kstd_ide_read_channel(i, ATA_REG_STATUS);
 
-                if ((__status && ATA_SR_ERR))
+                if ((__status & ATA_SR_ERR))
                 {
                     __err = 1;
 
@@ -331,71 +339,71 @@ void __kstd_ide_initialize(unsigned int __PC1, unsigned int __PCC1, unsigned int
                 {
                     break;
                 }
+            }
 
-                if (__err != 0)
+            if (__err != 0)
+            {
+                unsigned char __cl = __kstd_ide_read_channel(i, ATA_REG_LBA1);
+                unsigned char __ch = __kstd_ide_read_channel(i, ATA_REG_LBA2);
+
+                if (__cl == 0x14 && __ch == 0xEB)
                 {
-                    unsigned char __cl = __kstd_ide_read_channel(i, ATA_REG_LBA1);
-                    unsigned char __ch = __kstd_ide_read_channel(i, ATA_REG_LBA2);
-
-                    if (__cl == 0x14 && __ch == 0xEB)
-                    {
-                        __type = IDE_ATAPI;
-                    }
-                    else if (__cl == 0x69 && __ch == 0x96)
-                    {
-                        __type = IDE_ATAPI;
-                    }
-                    else
-                    {
-                        continue;
-                    }
-
-                    __kstd_ide_write_channel(i, ATA_REG_COMMAND, ATA_CMD_IDENTIFY_PACKET);
+                    __type = IDE_ATAPI;
                 }
-
-                __kstd_ide_read_buffer(i, ATA_REG_DATA, (unsigned int *) __kstd_ide_buf, 128);
-
-                __kstd_ide_devices[count].__reserved     = 1;
-                __kstd_ide_devices[count].__type         = __type;
-                __kstd_ide_devices[count].__channel      = i;
-                __kstd_ide_devices[count].__drive        = j;
-                __kstd_ide_devices[count].__signature    = *((unsigned short *) (__kstd_ide_buf + ATA_IDENT_DEVICETYPE));
-                __kstd_ide_devices[count].__capabilities = *((unsigned short *) (__kstd_ide_buf + ATA_IDENT_CAPABILITIES));
-                __kstd_ide_devices[count].__commandsets  = *((unsigned int *)   (__kstd_ide_buf + ATA_IDENT_COMMANDSETS));
-
-                if (__kstd_ide_devices[count].__commandsets & (1 << 26))
+                else if (__cl == 0x69 && __ch == 0x96)
                 {
-                    __kstd_ide_devices[count].__size = *((unsigned int *) (__kstd_ide_buf + ATA_IDENT_MAX_LBA_EXT));
+                    __type = IDE_ATAPI;
                 }
                 else
                 {
-                    __kstd_ide_devices[count].__size = *((unsigned int *) (__kstd_ide_buf + ATA_IDENT_MAX_LBA));
+                    continue;
                 }
 
-                for (k = 0; k < 40; k += 2)
-                {
-                    __kstd_ide_devices[count].__model[k]     = __kstd_ide_buf[ATA_IDENT_MODEL + k + 1];
-                    __kstd_ide_devices[count].__model[k + 1] = __kstd_ide_buf[ATA_IDENT_MODEL + k];
-                }
-
-                __kstd_ide_devices[count].__model[40] = '\0';
-
-                for (k = 39; i >= 0; k--)
-                {
-                    char __ch = __kstd_ide_devices[count].__model[k];
-
-                    if (__ch == ' ')
-                    {
-                        __kstd_ide_devices[count].__model[k] = '\0';
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-
-                count++;
+                __kstd_ide_write_channel(i, ATA_REG_COMMAND, ATA_CMD_IDENTIFY_PACKET);
             }
+
+            __kstd_ide_read_buffer(i, ATA_REG_DATA, (unsigned int *) __kstd_ide_buf, 128);
+
+            __kstd_ide_devices[count].__reserved     = 1;
+            __kstd_ide_devices[count].__type         = __type;
+            __kstd_ide_devices[count].__channel      = i;
+            __kstd_ide_devices[count].__drive        = j;
+            __kstd_ide_devices[count].__signature    = *((unsigned short *) (__kstd_ide_buf + ATA_IDENT_DEVICETYPE));
+            __kstd_ide_devices[count].__capabilities = *((unsigned short *) (__kstd_ide_buf + ATA_IDENT_CAPABILITIES));
+            __kstd_ide_devices[count].__commandsets  = *((unsigned int *)   (__kstd_ide_buf + ATA_IDENT_COMMANDSETS));
+
+            if (__kstd_ide_devices[count].__commandsets & (1 << 26))
+            {
+                __kstd_ide_devices[count].__size = *((unsigned int *) (__kstd_ide_buf + ATA_IDENT_MAX_LBA_EXT));
+            }
+            else
+            {
+                __kstd_ide_devices[count].__size = *((unsigned int *) (__kstd_ide_buf + ATA_IDENT_MAX_LBA));
+            }
+
+            for (k = 0; k < 40; k += 2)
+            {
+                __kstd_ide_devices[count].__model[k]     = __kstd_ide_buf[ATA_IDENT_MODEL + k + 1];
+                __kstd_ide_devices[count].__model[k + 1] = __kstd_ide_buf[ATA_IDENT_MODEL + k];
+            }
+
+            __kstd_ide_devices[count].__model[40] = '\0';
+
+            for (k = 39; i >= 0; k--)
+            {
+                char __ch = __kstd_ide_devices[count].__model[k];
+
+                if (__ch == ' ')
+                {
+                    __kstd_ide_devices[count].__model[k] = '\0';
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            count++;
         }
     
         for (i = 0; i < 4; i++)
@@ -579,7 +587,7 @@ void __kstd_ide_irq(void)
 
 int __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer)
 {
-    if (__drive > 5 || __kstd_ide_devices[__drive].__reserved == 0)
+    if (__drive > MAXIMUM_IDE_DEVICES || __kstd_ide_devices[__drive].__reserved == 0)
     {
         kstd_write("IDE: - Drive not found!\n");
 
@@ -608,7 +616,7 @@ int __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, uns
 
 int __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer)
 {
-    if (__drive > 5 || __kstd_ide_devices[__drive].__reserved == 0)
+    if (__drive > MAXIMUM_IDE_DEVICES || __kstd_ide_devices[__drive].__reserved == 0)
     {
         kstd_write("IDE: - Drive not found!\n");
 

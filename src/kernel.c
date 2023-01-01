@@ -26,7 +26,7 @@ void kmain(void)
 	int __gdt_status = __kstd_mgdt_enable();
 	int __isr_status = __kstd_isr_enable();
 	int __key_status = __kstd_enable_keyboard();
-	int __ide_status = __kstd_ide_ata_initialize();
+	int __ide_status = 0;
 	int __asr_status = 0;
 
 	kstd_clear();
@@ -56,6 +56,7 @@ void kmain(void)
 
 	__asr_status = assert(__ide_status == 0); (__asr_status) != 0 ? kstd_writec("[Done]\n", ATTR_BYTE_GRN_ON_BLK) : kstd_writec("[Failed]\n", ATTR_BYTE_RED_ON_BLK);
 
+	__ide_status = __kstd_ide_ata_initialize();
 	__kstd_ext2_read_superblock();
 	__kstd_ext2_init();
 

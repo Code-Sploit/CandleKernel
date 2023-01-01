@@ -92,32 +92,35 @@ typedef struct __kstd_ext2_dirent
     char *__dname;
 } __kstd_ext2_dirent;
 
-uint32 __kstd_ext2_find_in_dir(uint32 __inode_n, char *__dname);
-
 void __kstd_ext2_read_superblock(void);
 
-void __kstd_ext2_init(void);
+int __kstd_ext2_lba_to_block(int __bnlba);
 
-char *__kstd_ext2_read_file(char *__fpath);
+unsigned int __kstd_ext2_determine_blk_group(unsigned int __inode);
 
-char **__kstd_ext2_flist(uint32 __inode_n);
+unsigned int __kstd_ext2_get_inode_index(unsigned int __inode);
 
-uint32 __kstd_ext2_path_to_inode(char *__path);
+__kstd_ext2_bgdt *__kstd_ext2_parse_bgdt(unsigned int __gblock);
 
-void __kstd_ext2_getdata(char *__data, uint32 __len, uint32 __start, uint32 *__sender);
+void __kstd_ext2_get_inode_type(uint32 __type);
 
-char *__kstd_ext2_get_filedata(uint32 __inode_n);
+__kstd_ext2_inode *__kstd_ext2_read_inode(unsigned int __inode);
 
-__kstd_ext2_inode *__kstd_ext2_read_inode(uint32 __inode);
+void __kstd_ext2_getdata(char *__data, unsigned int __len, unsigned int __start, unsigned int *__sender);
 
-__kstd_ext2_bgdt *__kstd_ext2_parse_bgdt(uint32 __gblock);
+__kstd_ext2_dirent __kstd_ext2_read_dirent(unsigned int *__data, unsigned int __index);
 
-__kstd_ext2_dirent __kstd_ext2_read_dirent(uint32 *__data, uint32 __index);
+char **__kstd_ext2_flist(unsigned int __ninode);
 
-uint32 __kstd_ext2_get_inode_index(uint32 __inode);
+unsigned int __kstd_ext2_find_in_dir(unsigned int __ninode, char *__dname);
 
-uint32 __kstd_ext2_determine_blk_group(uint32 __inode);
+char *__kstd_ext2_get_filedata(uint32 __ninode);
 
-static int __kstd_ext2_lba_to_block(int __block);
+uint32 __kstd_ext2_path_to_inode(char* path);
+
+char* __kstd_ext2_read_file(char* fpath);
+
+void __kstd_ext2_rewrite_bgds(uint32 group, __kstd_ext2_bgdt new_bgdt);
+void __kstd_ext2_init();
 
 #endif
