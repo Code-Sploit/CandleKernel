@@ -11,7 +11,7 @@ struct IDEChannelRegisters
     unsigned short __cbase;
     unsigned short __bmide;
 
-    unsigned char __nint;
+    unsigned short __nint;
 } __kstd_ide_channels[2];
 
 /* IDE Device Container Struct */
@@ -416,10 +416,10 @@ void __kstd_ide_initialize(unsigned int __PC1, unsigned int __PCC1, unsigned int
                 
                 char *__ssize;
 
-                kstd_itoa(__ssize, 10, __kstd_ide_devices[i].__size / 1024 / 1024 / 2);
+                kstd_itoa(__ssize, 10, __kstd_ide_devices[i].__size / 1024 / 2);
 
                 kstd_write(__ssize);
-                kstd_write("GB - ");
+                kstd_write("MB - ");
                 kstd_write(__kstd_ide_devices[i].__model);
             }
         }

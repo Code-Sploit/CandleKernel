@@ -21,6 +21,7 @@ gcc -m32 $CFLAGS -c $SRCDIR/stdproc.c -o $BUILDDIR/stdproc.o
 gcc -m32 $CFLAGS -c $SRCDIR/stdlib.c -o $BUILDDIR/stdlib.o
 gcc -m32 $CFLAGS -c $SRCDIR/panic.c -o $BUILDDIR/panic.o
 gcc -m32 $CFLAGS -c $SRCDIR/memory.c -o $BUILDDIR/memory.o
+gcc -m32 $CFLAGS -c $SRCDIR/kapi.c -o $BUILDDIR/kapi.o
 
 gcc -m32 $CFLAGS -c drivers/idt/idt.c -o $BUILDDIR/idt.o
 gcc -m32 $CFLAGS -c drivers/isr/isr.c -o $BUILDDIR/isr.o
@@ -31,7 +32,7 @@ gcc -m32 $CFLAGS -c drivers/vga/vga.c -o $BUILDDIR/vga.o
 gcc -m32 $CFLAGS -c drivers/ide/ide.c -o $BUILDDIR/ide.o
 gcc -m32 $CFLAGS -c drivers/ext2/ext2.c -o $BUILDDIR/ext2.o
 
-ld -m elf_i386 -T$CONFDIR/linker.ld -o kernel.elf $BUILDDIR/kernel.o $BUILDDIR/kasm.o $BUILDDIR/stdio.o $BUILDDIR/stdproc.o $BUILDDIR/stdlib.o $BUILDDIR/panic.o $BUILDDIR/memory.o $BUILDDIR/idt.o $BUILDDIR/isr.o $BUILDDIR/pio.o $BUILDDIR/interrupts.o $BUILDDIR/keyboard.o $BUILDDIR/console.o $BUILDDIR/mgdt.o $BUILDDIR/gdt.o $BUILDDIR/vga.o $BUILDDIR/ide.o $BUILDDIR/ext2.o
+ld -m elf_i386 -T$CONFDIR/linker.ld -o kernel.elf $BUILDDIR/kernel.o $BUILDDIR/kasm.o $BUILDDIR/stdio.o $BUILDDIR/stdproc.o $BUILDDIR/stdlib.o $BUILDDIR/panic.o $BUILDDIR/memory.o $BUILDDIR/idt.o $BUILDDIR/isr.o $BUILDDIR/pio.o $BUILDDIR/interrupts.o $BUILDDIR/keyboard.o $BUILDDIR/console.o $BUILDDIR/mgdt.o $BUILDDIR/gdt.o $BUILDDIR/vga.o $BUILDDIR/ide.o $BUILDDIR/ext2.o $BUILDDIR/kapi.o
 
 echo "-------"
 echo "Compilation succeeded!"

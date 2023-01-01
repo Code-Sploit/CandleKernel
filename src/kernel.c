@@ -61,5 +61,6 @@ void kmain(void)
 	__kstd_ext2_init();
 
 	kstd_write("\nSuccessfully booted: CandleOS!\n");
+	kstd_write("\nRun: `HELP` for a list of commands.\n");
 	kstd_write("\nroot@candleos > ");
 }

@@ -14,7 +14,7 @@ void __kstd_ext2_read_superblock(void)
 {
     unsigned int *__sb = kstd_mem_malloc(sizeof(*__sb));
 
-        __kstd_ide_read_sectors(DRIVE, 1, 2, __kstd_ext2_head);
+    __kstd_ide_read_sectors(DRIVE, 1, 2, __kstd_ext2_head);
 }
 
 int __kstd_ext2_lba_to_block(int __bnlba)
