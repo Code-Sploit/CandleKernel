@@ -5,7 +5,7 @@
 
 #define EXT2_SUPER 1
 
-#define INODE_SIZE 256
+#define INODE_SIZE 256 //Hardcoded here cause im lazy @TODO read the actual superblock field dummy
 
 #define INODE_TYPE_FIFO 1
 #define INODE_TYPE_CHAR_DEV 2
@@ -15,112 +15,86 @@
 #define INODE_TYPE_SYMB_LINK 0xA000
 #define INODE_TYPE_UNIX_SOCKET 0xC000
 
-#define ERRNO_FNF 0
+//Should move these defs into a new header file later, but putting this here for now
+#define FILE_NOT_FOUND 0
 
-typedef struct __kstd_ext2_superblock
+typedef struct ext2_superblock {
+    uint32 inodes_count;			// Total # of inodes
+	uint32 blocks_count;			// Total # of blocks
+	uint32 r_blocks_count;		// # of reserved blocks for superuser
+	uint32 free_blocks_count;	
+	uint32 free_inodes_count;
+	uint32 first_data_block;
+	uint32 log_block_size;		// 1024 << Log2 block size  = block size
+	uint32 log_frag_size;
+	uint32 blocks_per_group;
+	uint32 frags_per_group;
+	uint32 inodes_per_group;
+	uint32 mtime;					// Last mount time, in POSIX time
+	uint32 wtime;					// Last write time, in POSIX time
+	uint16 mnt_count;				// # of mounts since last check
+	uint16 max_mnt_count;			// # of mounts before fsck must be done
+	uint16 magic;					// 0xEF53
+	uint16 state;
+	uint16 errors;
+	uint16 minor_rev_level;
+	uint32 lastcheck;
+	uint32 checkinterval;
+	uint32 creator_os;
+	uint32 rev_level;
+	uint16 def_resuid;
+	uint16 def_resgid;
+}ext2_superblock;
+
+typedef struct ext2_bgdt {
+    uint32 blk_bmap;
+    uint32 inode_bmap;
+    uint32 inode_table_start;
+    uint16 unalloc_blocks;
+    uint16 unalloc_inodes;
+    uint16 num_of_dirs;
+    uint16 pad[7];
+}ext2_bgdt;
+
+typedef struct ext2_inode
 {
-    uint32 __inodes_count;
-	uint32 __blocks_count;
-	uint32 __r_blocks_count;
-	uint32 __free_blocks_count;	
-	uint32 __free_inodes_count;
-	uint32 __first_data_block;
-	uint32 __log_block_size;
-	uint32 __log_frag_size;
-	uint32 __blocks_per_group;
-	uint32 __frags_per_group;
-	uint32 __inodes_per_group;
-	uint32 __mtime;
-	uint32 __wtime;
-	uint16 __mnt_count;
-	uint16 __max_mnt_count;
-	uint16 __magic;
-	uint16 __state;
-	uint16 __errors;
-	uint16 __minor_rev_level;
-	uint32 __lastcheck;
-	uint32 __checkinterval;
-	uint32 __creator_os;
-	uint32 __rev_level;
-	uint16 __def_resuid;
-	uint16 __def_resgid;
-} __kstd_ext2_superblock;
+    unsigned short type_perm;
+    unsigned short user_id;
+    unsigned int size_low;
+    unsigned int last_access_time;
+    unsigned int creation_time;
+    unsigned int modification_time;
+    unsigned int deletion_time;
+    unsigned short group_id;
+    unsigned short hard_links;
+    unsigned int sector_usage;
+    unsigned int flags;
+    unsigned int OS_type;
+    uint32 direct_block_pointers[12];
+    unsigned int singly_indirect_block_pointer;
+    unsigned int doubly_indirect_block_pointer;
+    unsigned int triply_indirect_block_pointer;
+    unsigned int generation_num;
+    unsigned int extended_attribute_block;
+    unsigned int size_high_dir_acl;
+    unsigned int block_addr_of_fragment;
+    unsigned char os_specific[12];
+} ext2_inode;
 
-typedef struct __kstd_ext2_bgdt
+typedef struct ext2_dirent
 {
-    uint32 __blk_bmap;
-    uint32 __inode_bmap;
-    uint32 __inode_table_start;
-    uint16 __unalloc_blocks;
-    uint16 __unalloc_inodes;
-    uint16 __num_of_dirs;
-    uint16 __pad[7];
-} __kstd_ext2_bgdt;
+	uint32 inode;
+	uint32 dirent_size;
+	uint32 name_len;
+	uint32 type;
+	char* name;
+} ext2_dirent;
 
-typedef struct __kstd_ext2_inode
-{
-    unsigned short __type_perm;
-    unsigned short __user_id;
-    unsigned int __size_low;
-    unsigned int __last_access_time;
-    unsigned int __creation_time;
-    unsigned int __modification_time;
-    unsigned int __deletion_time;
-    unsigned short __group_id;
-    unsigned short __hard_links;
-    unsigned int __sector_usage;
-    unsigned int __flags;
-    unsigned int __OS_type;
-    uint32 __direct_block_pointers[12];
-    unsigned int __singly_indirect_block_pointer;
-    unsigned int __doubly_indirect_block_pointer;
-    unsigned int __triply_indirect_block_pointer;
-    unsigned int __generation_num;
-    unsigned int __extended_attribute_block;
-    unsigned int __size_high_dir_acl;
-    unsigned int __block_addr_of_fragment;
-    unsigned char __os_specific[12];
-} __kstd_ext2_inode;
+void read_superblock();
+void ext2_init();
+char* ext2_read_file(char* fpath);
+char** ext2_ls(uint32 inode_num);
+uint32 ext2_path_to_inode(char* path);
 
-typedef struct __kstd_ext2_dirent
-{
-    uint32 __inode;
-    uint32 __dirent_size;
-    uint32 __name_len;
-    uint32 __type;
-
-    char *__dname;
-} __kstd_ext2_dirent;
-
-void __kstd_ext2_read_superblock(void);
-
-int __kstd_ext2_lba_to_block(int __bnlba);
-
-unsigned int __kstd_ext2_determine_blk_group(unsigned int __inode);
-
-unsigned int __kstd_ext2_get_inode_index(unsigned int __inode);
-
-__kstd_ext2_bgdt *__kstd_ext2_parse_bgdt(unsigned int __gblock);
-
-void __kstd_ext2_get_inode_type(uint32 __type);
-
-__kstd_ext2_inode *__kstd_ext2_read_inode(unsigned int __inode);
-
-void __kstd_ext2_getdata(char *__data, unsigned int __len, unsigned int __start, unsigned int *__sender);
-
-__kstd_ext2_dirent __kstd_ext2_read_dirent(unsigned int *__data, unsigned int __index);
-
-char **__kstd_ext2_flist(unsigned int __ninode);
-
-unsigned int __kstd_ext2_find_in_dir(unsigned int __ninode, char *__dname);
-
-char *__kstd_ext2_get_filedata(uint32 __ninode);
-
-uint32 __kstd_ext2_path_to_inode(char* path);
-
-char* __kstd_ext2_read_file(char* fpath);
-
-void __kstd_ext2_rewrite_bgds(uint32 group, __kstd_ext2_bgdt new_bgdt);
-void __kstd_ext2_init();
-
+ext2_superblock *ext2_get_sb(void);
 #endif

@@ -1,6 +1,6 @@
 #include "idt.h"
 
-#define low_16(address) (uint16)((address) & 0xFFFF)
+#define low_16(address)  (uint16)((address) & 0xFFFF)
 #define high_16(address) (uint16)(((address) >> 16) & 0xFFFF)
 
 idt_gate_t __kstd_idt[IDT_ENTRIES];

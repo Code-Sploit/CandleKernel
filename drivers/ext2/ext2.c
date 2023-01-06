@@ -1,262 +1,211 @@
 #include "ext2.h"
 
+#include "../vga/vga.h"
 #include "../ide/ide.h"
-#include "../console/console.h"
 
 #include "../../lib/memory.h"
-#include "../../lib/stdio.h"
+#include "../../lib/stdlib.h"
 
-#define DRIVE 0
+ext2_superblock* sb;
 
-__kstd_ext2_superblock *__kstd_ext2_head;
+#define DRIVE 0 // We are using drive 0, the harddisk
 
-void __kstd_ext2_read_superblock(void)
+void read_superblock(){
+    uint32* superblock = kstd_mem_malloc(sizeof(*superblock));
+
+	ide_read_sectors(DRIVE, 1, 2, sb);      
+}
+
+static int lba_to_ext2_block(int block_num_LBA)
 {
-    unsigned int *__sb = kstd_mem_malloc(sizeof(*__sb));
-
-    __kstd_ide_read_sectors(DRIVE, 1, 2, __kstd_ext2_head);
+	 int ext2block = block_num_LBA - 1;
+	 return ext2block;
 }
 
-int __kstd_ext2_lba_to_block(int __bnlba)
+uint32 determine_blk_group(uint32 inode){
+    uint32 block_group = (inode - 1) / sb->inodes_per_group;
+    return block_group;
+}
+
+uint32 get_inode_index(uint32 inode){
+    uint32 index = (inode - 1) % sb->inodes_per_group;
+    return index;
+}
+
+ext2_bgdt* parse_bgdt(uint32 block_group) {
+	ext2_bgdt* bgdt; 
+	
+	uint32 blk_group_start_block = (block_group - 1) * sb->blocks_per_group + 1;
+	uint32 bgdt_start = blk_group_start_block + 2;
+	uint32 *bgdt_tmp = kstd_mem_malloc(sizeof(bgdt));
+	
+	ide_read_sectors(DRIVE, 1, bgdt_start + 1, bgdt);
+	
+	printf("\nBlock bitmap: %d\ninode bmap: %d\ninode table start: %d\nUnallocated Blocks: %d\nUnallocated Inodes: %d\nNumber of dirs: %d", bgdt->blk_bmap, bgdt->inode_bmap, bgdt->inode_table_start, bgdt->unalloc_blocks, bgdt->unalloc_inodes, bgdt->num_of_dirs);
+	return bgdt;
+}
+
+void get_inode_type(uint32 type){
+	switch(type) {
+			default:
+				printf("\nUnknown Inode Type");	
+				printf("%x", type);	
+				break;
+			case INODE_TYPE_FIFO:
+				printf("\nInode Type: FIFO");
+				break;
+			case INODE_TYPE_CHAR_DEV:
+				printf("\nInode Type: Character Device");
+				break;
+			case INODE_TYPE_DIR:
+				printf("\nInode Type: Directory");
+				break;
+			case INODE_TYPE_BLK_DEV:
+				printf("\nInode Type: Block Device");
+				break;
+			case INODE_TYPE_FILE:
+				printf("\nInode Type: Regular File");
+				break;
+			case INODE_TYPE_SYMB_LINK:
+				printf("\nInode Type: Symbolic Link");
+				break;
+			case INODE_TYPE_UNIX_SOCKET:
+				printf("\nInode Type: Unix Socket");
+				break;	
+		}
+}
+
+ext2_inode* read_inode(uint32 inode) {
+	printf("\nReading file...\n");
+	
+	uint32 group = determine_blk_group(inode) + 1;
+	uint32 index = get_inode_index(inode);
+	
+	ext2_bgdt* inode_bgdt;
+	inode_bgdt = parse_bgdt(group);
+	
+	uint32 inode_table_start = inode_bgdt->inode_table_start;
+	
+	printf("\nReading Inode: %d", inode);
+	
+	uint32 containing_block = (index * INODE_SIZE) / (1024 << sb->log_block_size);
+	uint32* inode_tmp = kstd_mem_malloc(sizeof(inode_tmp));
+	
+	ide_read_sectors(DRIVE, 2, 2 * (inode_table_start + containing_block), inode_tmp);
+	
+	ext2_inode* inode_info;
+	inode_info = (ext2_inode*)((uint32) inode_tmp + (index % (1024/INODE_SIZE))*INODE_SIZE);
+	
+	printf("\nInode Type: %x\nInode UID: %x\nInode Block 0: %d\n", inode_info->type_perm, inode_info->user_id, inode_info->direct_block_pointers[0]);
+	
+	uint32 index_in_block = inode % 4;
+	
+	return inode_info;
+}
+
+void getdata(char* data, uint32 len, uint32 start, uint32* from)
 {
-    int __eblock = __bnlba - 1;
-
-    return __eblock;
+	for(int i = 0; i < len; i++){
+		uint32 index = i % 4;		
+		if(index == 0)
+			data[i] = from[i + start - 3 * (i / 4)] & 0xFF;
+		else if(index == 1)
+			data[i] = (from[i + start - 1 - 3 * (i / 4)] >> 8) & 0xFF;
+		else if(index == 2)
+			data[i] = (from[i + start - 2 - 3 * (i / 4)] >> 16) & 0xFF;
+		else if(index == 3)
+			data[i] = (from[i + start - 3 - 3 * (i / 4)] >> 24) & 0xFF;						
+	}
 }
 
-unsigned int __kstd_ext2_determine_blk_group(unsigned int __inode)
-{
-    unsigned int __bgroup = (__inode - 1) / __kstd_ext2_head->__inodes_per_group;
+ext2_dirent ext2_read_dirent(uint32* data, uint32 index){
+	ext2_dirent dirent;
 
-    return __bgroup;
+	dirent.inode = data[index] & 0xFF;
+	dirent.dirent_size = data[index + 1] & 0xFF;
+	dirent.name_len = (data[index + 1] & 0x0FF000) >> 16;
+
+	getdata(dirent.name, dirent.name_len, index + 2, data);
+
+	char * tmp = kstd_mem_malloc(dirent.name_len + 1);
+
+	kstd_memcpy(tmp, dirent.name, dirent.name_len);
+
+	dirent.name = tmp;
+
+	return dirent;
 }
 
-unsigned int __kstd_ext2_get_inode_index(unsigned int __inode)
-{
-    unsigned int __index = (__inode - 1) % __kstd_ext2_head->__inodes_per_group;
+char **ext2_ls(uint32 inode_num){
+	char **return_names = kstd_mem_malloc(sizeof(**return_names));
 
-    return __index;
+	ext2_inode *inode = read_inode(inode_num);
+	uint32* dir = kstd_mem_malloc(sizeof(*dir));
+	uint32 datablock0 = inode->direct_block_pointers[0];
+
+	ide_read_sectors(DRIVE, 6, 2 * datablock0, dir);
+
+	int curr = 0;
+	int next;
+	int i;
+
+	while(1){
+		ext2_dirent curr_dirent;
+		curr_dirent = ext2_read_dirent(dir, curr);
+
+		if(curr_dirent.inode == 0){
+			break;
+		}
+
+		next = curr_dirent.dirent_size / 4;
+
+		printf(" %s", curr_dirent.name);
+
+		return_names[i] = curr_dirent.name;
+		curr = curr + next;
+		i++;
+	}
+	return return_names;
 }
 
-__kstd_ext2_bgdt *__kstd_ext2_parse_bgdt(unsigned int __gblock)
-{
-    __kstd_ext2_bgdt *__bgdt;
+uint32 ext2_find_in_dir(uint32 inode_num, char* dirent_name){
+	uint32 return_inode = FILE_NOT_FOUND;
+	ext2_inode* inode = read_inode(inode_num);
+	uint32* dir = kstd_mem_malloc(sizeof(*dir));
+	uint32 datablock0 = inode->direct_block_pointers[0];
+	ide_read_sectors(DRIVE, 6, 2 * datablock0, dir);
+	int curr = 0;
+	int next;
+	int i = 0;
+	while(1){
+		ext2_dirent curr_dirent;
+		curr_dirent = ext2_read_dirent(dir, curr);
+		if(curr_dirent.inode == 0){
+			break;
+		}
 
-    unsigned int __gblock_start = (__gblock - 1) * __kstd_ext2_head->__blocks_per_group + 1;
-    unsigned int __bgdt_start   = __gblock_start + 2;
+		next = curr_dirent.dirent_size / 4;
 
-    unsigned int *__bgdt_tmp = kstd_mem_malloc(sizeof(__bgdt));
-
-    __kstd_ide_read_sectors(DRIVE, 1, __bgdt_start + 1, __bgdt);
-
-    return __bgdt;
+		if(!__kstd_strcmp(curr_dirent.name, dirent_name)){
+			return_inode = curr_dirent.inode;
+		}
+		curr = curr + next;
+		i++;
+	}
+	return return_inode;
 }
 
-void __kstd_ext2_get_inode_type(uint32 __type){
-	switch (__type)
-    {
-        case INODE_TYPE_FIFO:
-            kstd_write("\nInode Type: FIFO");
-
-            break;
-        case INODE_TYPE_CHAR_DEV:
-            kstd_write("\nInode Type: Character Device");
-
-            break;
-        case INODE_TYPE_DIR:
-            kstd_write("\nInode Type: Directory");
-
-            break;
-        case INODE_TYPE_BLK_DEV:
-            kstd_write("\nInode Type: Block Device");
-
-            break;
-        case INODE_TYPE_FILE:
-            kstd_write("\nInode Type: Regular File");
-
-            break;
-        case INODE_TYPE_SYMB_LINK:
-            kstd_write("\nInode Type: Symbolic Link");
-
-            break;
-        case INODE_TYPE_UNIX_SOCKET:
-            kstd_write("\nInode Type: Unix Socket");
-
-            break;
-
-        default:
-            kstd_write("\nUnknown Inode Type");	
-
-            break;	
-    }
+char* ext2_get_filedata(uint32 inode_num){
+	char* file_buf = kstd_mem_malloc(sizeof(*file_buf));
+	ext2_inode* inode = read_inode(inode_num);
+	uint32* filedata = kstd_mem_malloc(sizeof(filedata));
+	uint32 datablock0 = inode->direct_block_pointers[0];
+	ide_read_sectors(DRIVE, 1, 2 * datablock0, filedata);
+	getdata(file_buf, 1024, 0, filedata);
+	return file_buf;
 }
 
-__kstd_ext2_inode *__kstd_ext2_read_inode(unsigned int __inode)
-{
-    unsigned int __group = __kstd_ext2_determine_blk_group(__inode) + 1;
-    unsigned int __index = __kstd_ext2_get_inode_index(__inode);
-
-    __kstd_ext2_bgdt *__inode_bgdt;
-
-    __inode_bgdt = __kstd_ext2_parse_bgdt(__group);
-
-    unsigned int __inode_table_start = __inode_bgdt->__inode_table_start;
-    unsigned int __containing_block  = (__index * INODE_SIZE) / (1024 << __kstd_ext2_head->__log_block_size);
-
-    unsigned int *__inode_tmp = kstd_mem_malloc(sizeof(__inode_tmp));
-
-    __kstd_ide_read_sectors(DRIVE, 2, 2 * (__inode_table_start + __containing_block), __inode_tmp);
-
-    __kstd_ext2_inode *__inode_info;
-
-    __inode_info = (__kstd_ext2_inode *) ((unsigned int) __inode_tmp + (__index % (1024 / INODE_SIZE)) * INODE_SIZE);
-
-    return __inode_info;
-}
-
-void __kstd_ext2_getdata(char *__data, unsigned int __len, unsigned int __start, unsigned int *__sender)
-{
-    for (int i = 0; i < __len; i++)
-    {
-        unsigned int __index = (i % 4);
-
-        if (__index == 0)
-        {
-            __data[i] = __sender[i + __start - 3 * (i / 4)] & 0xFF;
-        }
-        else if (__index == 1)
-        {
-            __data[i] = (__sender[i + __start - 1 - 3 * (i / 4)] >> 8) & 0xFF;
-        }
-        else if (__index == 2)
-        {
-            __data[i] = (__sender[i + __start - 2 - 3 * (i / 4)] >> 16) & 0xFF;
-        }
-        else if (__index == 3)
-        {
-            __data[i] = (__sender[i + __start - 3 - 3 * (i / 4)] >> 24) & 0xFF;
-        }
-    }
-}
-
-__kstd_ext2_dirent __kstd_ext2_read_dirent(unsigned int *__data, unsigned int __index)
-{
-    __kstd_ext2_dirent __dirent;
-
-    __dirent.__inode       = __data[__index] & 0xFF;
-    __dirent.__dirent_size = __data[__index + 1] & 0xFF;
-    __dirent.__name_len    = (__data[__index + 1] & 0x0FF000) >> 16;
-
-    __kstd_ext2_getdata(__dirent.__dname, __dirent.__name_len, __index + 2, __data);
-
-    char *__tmp = kstd_mem_malloc(__dirent.__name_len + 1);
-
-    kstd_memcpy(__tmp, __dirent.__dname, __dirent.__name_len);
-
-    __dirent.__dname = __tmp;
-
-    return __dirent;
-}
-
-char **__kstd_ext2_flist(unsigned int __ninode)
-{
-    char **__rnames = kstd_mem_malloc(sizeof(**__rnames));
-
-    __kstd_ext2_inode *__inode = __kstd_ext2_read_inode(__ninode);
-
-    unsigned int *__dir = kstd_mem_malloc(sizeof(*__dir));
-    unsigned int __db0  = __inode->__direct_block_pointers[0];
-
-    __kstd_ide_read_sectors(DRIVE, 6, 2 * __db0, __dir);
-
-    int __curr = 0;
-    int __next = 0;
-    
-    int i = 0;
-
-    while (1)
-    {
-        __kstd_ext2_dirent __dcurr;
-
-        __dcurr = __kstd_ext2_read_dirent(__dir, __curr);
-
-        if (__dcurr.__inode == 0)
-        {
-            break;
-        }
-
-        __next = __dcurr.__dirent_size / 4;
-
-        __rnames[i] = __dcurr.__dname;
-
-        __curr = __curr + __next;
-
-        i++;
-    }
-
-    return __rnames;
-}
-
-unsigned int __kstd_ext2_find_in_dir(unsigned int __ninode, char *__dname)
-{
-    unsigned int __rinode = ERRNO_FNF;
-
-    __kstd_ext2_inode *__inode = __kstd_ext2_read_inode(__ninode);
-
-    unsigned int *__dir = kstd_mem_malloc(sizeof(*__dir));
-    unsigned int __db0  = __inode->__direct_block_pointers[0];
-
-    __kstd_ide_read_sectors(DRIVE, 6, 2 * __db0, __dir);
-
-    int __curr = 0;
-    int __next = 0;
-    
-    int i = 0;
-
-    while (1)
-    {
-        __kstd_ext2_dirent __dcurr;
-
-        __dcurr = __kstd_ext2_read_dirent(__dir, __curr);
-
-        if (__dcurr.__inode == 0)
-        {
-            break;
-        }
-
-        __next = __dcurr.__dirent_size / 4;
-
-        if (!__kstd_strcmp(__dcurr.__dname, __dname))
-        {
-            __rinode = __dcurr.__inode;
-        }
-
-        __curr = __curr + __next;
-
-        i++;
-    }
-
-    return __rinode;
-}
-
-char *__kstd_ext2_get_filedata(uint32 __ninode)
-{
-    char *__fbuf = kstd_mem_malloc(sizeof(*__fbuf));
-
-    __kstd_ext2_inode *__inode = __kstd_ext2_read_inode(__ninode);
-
-    unsigned int *__fdata = kstd_mem_malloc(sizeof(__fdata));
-    unsigned int __db0    = __inode->__direct_block_pointers[0];
-
-    __kstd_ide_read_sectors(DRIVE, 1, 2 * __db0, __fdata);
-
-    __kstd_ext2_getdata(__fbuf, 1024, 0, __fdata);
-
-    return __fbuf;
-}
-
-
-uint32 __kstd_ext2_path_to_inode(char* path){
+uint32 ext2_path_to_inode(char* path){
 	int i = 0;
 	uint32 last_inode = 2;
 	BOOL found = FALSE;
@@ -280,9 +229,8 @@ uint32 __kstd_ext2_path_to_inode(char* path){
 				y++;
 			}
 			start = end;
-			last_inode = __kstd_ext2_find_in_dir(last_inode, lookup_name);
+			last_inode = ext2_find_in_dir(last_inode, lookup_name);
 		}
-		// This is the last name
 		else if(i == __kstd_strlen(path) - 1 && found == TRUE){
 			end = i;
 			char* lookup_name = kstd_mem_malloc(end - start);
@@ -292,38 +240,39 @@ uint32 __kstd_ext2_path_to_inode(char* path){
 				y++;
 			}
 			start = end - 1;
-			last_inode = __kstd_ext2_find_in_dir(last_inode, lookup_name);
+			last_inode = ext2_find_in_dir(last_inode, lookup_name);
 		}
 		i++;
 	}
 	return last_inode;
 }
 
-char* __kstd_ext2_read_file(char* fpath){
+char* ext2_read_file(char* fpath){
 	char* file_buf = kstd_mem_malloc(sizeof(*file_buf));
-
-	uint32 file_inode = __kstd_ext2_path_to_inode(fpath);
-	file_buf = __kstd_ext2_get_filedata(file_inode);
-
+	uint32 file_inode = ext2_path_to_inode(fpath);
+	printf("\nFile Inode: %d", file_inode);
+	file_buf = ext2_get_filedata(file_inode);
 	return file_buf;
 }
 
-void __kstd_ext2_rewrite_bgds(uint32 group, __kstd_ext2_bgdt new_bgdt){
+void rewrite_bgds(uint32 group, ext2_bgdt new_bgdt){
 	uint32* data = kstd_mem_malloc(sizeof(*data));
-	
-    kstd_memcpy(data, &new_bgdt, sizeof(new_bgdt));
-	
-    uint32 blk_group_start_block = (group - 1) * __kstd_ext2_head->__blocks_per_group + 1;
+	kstd_memcpy(data, &new_bgdt, sizeof(new_bgdt));
+	uint32 blk_group_start_block = (group - 1) * sb->blocks_per_group + 1;
 	uint32 bgdt_start = blk_group_start_block + 2;
-	
-    __kstd_ide_write_sectors(DRIVE, 1, bgdt_start + 1, data);
+	ide_write_sectors(DRIVE, 1, bgdt_start + 1, data);
 }
 
-void __kstd_ext2_init(){
-	if(__kstd_ext2_head->__magic != 0xEF53){
-		kstd_write("Filesystem is Not EXT2!\n");
+void ext2_init(){
+	if(sb->magic != 0xEF53){
+		printf("Filesystem is Not EXT2!\n");
 	}
 	else {
-		kstd_write("Filesystem is EXT2!\n");
+		printf("Filesystem is EXT2!\n");
 	}
+}
+
+ext2_superblock *ext2_get_sb(void)
+{
+	return sb;
 }

@@ -13,7 +13,7 @@ void __kstd_execute_read(void)
 {
     char *__fdata = kstd_mem_malloc(sizeof(*__fdata));
 
-    __fdata = __kstd_ext2_read_file("hello.txt");
+    __fdata = ext2_read_file("hello.txt");
 
     kstd_write("File: [hello.txt]\n");
     kstd_write(__fdata);

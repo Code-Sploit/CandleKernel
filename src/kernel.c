@@ -10,6 +10,7 @@
 #include "../drivers/idt/idt.h"
 #include "../drivers/isr/isr.h"
 #include "../drivers/ide/ide.h"
+#include "../drivers/vga/vga.h"
 #include "../drivers/keyboard/keyboard.h"
 
 #include "../drivers/gdt/mgdt.h"
@@ -56,11 +57,15 @@ void kmain(void)
 
 	__asr_status = assert(__ide_status == 0); (__asr_status) != 0 ? kstd_writec("[Done]\n", ATTR_BYTE_GRN_ON_BLK) : kstd_writec("[Failed]\n", ATTR_BYTE_RED_ON_BLK);
 
-	__ide_status = __kstd_ide_ata_initialize();
-	__kstd_ext2_read_superblock();
-	__kstd_ext2_init();
+	ata_init();
+	read_superblock();
+	ext2_init();
 
 	kstd_write("\nSuccessfully booted: CandleOS!\n");
 	kstd_write("\nRun: `HELP` for a list of commands.\n");
 	kstd_write("\nroot@candleos > ");
+
+	ext2_superblock *__sb = ext2_get_sb();
+
+	printf("\n%x\n", __sb->magic);
 }

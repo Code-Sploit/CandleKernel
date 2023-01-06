@@ -1,7 +1,27 @@
 #ifndef IDE_H
 #define IDE_H
 
-/* ATA Status */
+// https://wiki.osdev.org/PCI_IDE_Controller
+#include "../../lib/stdlib.h"
+
+typedef struct {
+    uint16 base;  // i/o base port
+    uint16 control;  // control port
+    uint16 bm_ide; // bus-master ide port
+    uint16 no_intr; // no interrupt port
+} IDE_CHANNELS;
+
+typedef struct {
+    uint8 reserved; // 0 or 1 if drive exists or not
+    uint8 channel; // primary(0) or secondary(1)
+    uint8 drive; // master(0) or slave(1)
+    uint16 type; // drive type- ATA(0), ATAPI(1),
+    uint16 signature; // drive signature
+    uint16 features; // drive features
+    uint32 command_sets; // supported command sets
+    uint32 size; // drive size in sectors
+    unsigned char model[41]; // drive name
+} IDE_DEVICE;
 
 #define MAXIMUM_CHANNELS    2
 #define MAXIMUM_IDE_DEVICES    5
@@ -94,37 +114,28 @@
 #define LBA_MODE_28   0x01
 #define LBA_MODE_CHS  0x00
 
-/* IDE Buffer */
+/*
+prim_channel_base_addr: Primary channel base address(0x1F0-0x1F7)
+prim_channel_control_base_addr: Primary channel control base address(0x3F6)
+sec_channel_base_addr: Secondary channel base address(0x170-0x177)
+sec_channel_control_addr: Secondary channel control base address(0x376)
+bus_master_addr: Bus master address(pass 0 for now)
+*/
+void ide_init(uint32 prim_channel_base_addr, uint32 prim_channel_control_base_addr,
+            uint32 sec_channel_base_addr, uint32 sec_channel_control_addr,
+            uint32 bus_master_addr);
 
-unsigned static char __kstd_ide_buf[2048]    = {0};
-unsigned static char __kstd_atapi_packet[12] = {0xA8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+void ide_wait_irq();
+void ide_irq();
 
-volatile unsigned static char __kstd_ide_irq_invoked = 0;
+// start from lba = 0
+int ide_read_sectors(uint8 drive, uint8 num_sectors, uint32 lba, uint32 *buffer);
 
-/* Methods */
+// start from lba = 0
+int ide_write_sectors(uint8 drive, uint8 num_sectors, uint32 lba, uint32 *buffer);
 
-static unsigned char __kstd_ide_read_channel(unsigned char __channel, unsigned char __reg);
-static void __kstd_ide_write_channel(unsigned char __channel, unsigned char __reg, unsigned char __data);
 
-void __kstd_ide_insl(unsigned short __register, unsigned int *__buffer_ptr, int __quads);
-void __kstd_ide_outsl(unsigned short __register, unsigned int *__buffer_ptr, int __quads);
-
-void __kstd_ide_read_buffer(unsigned char __channel, unsigned char __reg, unsigned int *__buffer, unsigned int __quads);
-void __kstd_ide_write_buffer(unsigned char __channel, unsigned char __reg, unsigned int *__buffer, unsigned int __quads);
-
-unsigned char __kstd_ide_polling_channel(unsigned char __channel, unsigned char __deepcheck);
-unsigned char __kstd_ide_print_error(unsigned int __drive, unsigned char __err);
-
-void __kstd_ide_initialize(unsigned int __PC1, unsigned int __PCC1, unsigned int __PC2, unsigned int __PCC2, unsigned int __BUS);
-
-unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __drive, unsigned int __lba, unsigned char __nsectors, unsigned int __buffer);
-
-void __kstd_ide_waitfor_irq(void);
-void __kstd_ide_irq(void);
-
-int __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer);
-int __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer);
-
-int __kstd_ide_ata_initialize(void);
+void ata_init();
+int ata_get_drive_by_model(const char *model);
 
 #endif

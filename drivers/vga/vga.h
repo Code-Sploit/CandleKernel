@@ -41,5 +41,6 @@ void __kstd_vga_putchar(char __c, unsigned short __cl);
 void __kstd_vga_clear(void);
 
 void __kstd_vga_backspace(void);
+void printf(const char *format, ...);
 
 #endif

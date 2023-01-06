@@ -12,7 +12,7 @@ mkdir -p $BUILDDIR
 
 nasm -f elf $ASMDIR/kernel.asm -o $BUILDDIR/kasm.o
 nasm -f elf $ASMDIR/interrupts.asm -o $BUILDDIR/interrupts.o
-nasm -f elf $ASMDIR/pio.asm -o $BUILDDIR/pio.o
+#nasm -f elf $ASMDIR/pio.asm -o $BUILDDIR/pio.o
 nasm -f elf $ASMDIR/gdt.asm -o $BUILDDIR/gdt.o
 
 gcc -m32 $CFLAGS -c $SRCDIR/kernel.c -o $BUILDDIR/kernel.o
@@ -31,6 +31,7 @@ gcc -m32 $CFLAGS -c drivers/gdt/mgdt.c -o $BUILDDIR/mgdt.o
 gcc -m32 $CFLAGS -c drivers/vga/vga.c -o $BUILDDIR/vga.o
 gcc -m32 $CFLAGS -c drivers/ide/ide.c -o $BUILDDIR/ide.o
 gcc -m32 $CFLAGS -c drivers/ext2/ext2.c -o $BUILDDIR/ext2.o
+gcc -m32 $CFLAGS -c drivers/pio/pio.c -o $BUILDDIR/pio.o
 
 ld -m elf_i386 -T$CONFDIR/linker.ld -o kernel.elf $BUILDDIR/kernel.o $BUILDDIR/kasm.o $BUILDDIR/stdio.o $BUILDDIR/stdproc.o $BUILDDIR/stdlib.o $BUILDDIR/panic.o $BUILDDIR/memory.o $BUILDDIR/idt.o $BUILDDIR/isr.o $BUILDDIR/pio.o $BUILDDIR/interrupts.o $BUILDDIR/keyboard.o $BUILDDIR/console.o $BUILDDIR/mgdt.o $BUILDDIR/gdt.o $BUILDDIR/vga.o $BUILDDIR/ide.o $BUILDDIR/ext2.o $BUILDDIR/kapi.o
 

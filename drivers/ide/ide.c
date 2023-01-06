@@ -1,651 +1,529 @@
 #include "ide.h"
 
 #include "../pio/pio.h"
+#include "../vga/vga.h"
 
-#include "../../lib/memory.h"
-#include "../../lib/stdio.h"
+// https://wiki.osdev.org/PCI_IDE_Controller
+// https://datacadamia.com/io/drive/lba
 
-struct IDEChannelRegisters
-{
-    unsigned short __base;
-    unsigned short __cbase;
-    unsigned short __bmide;
+IDE_CHANNELS g_ide_channels[MAXIMUM_CHANNELS];
+IDE_DEVICE g_ide_devices[MAXIMUM_IDE_DEVICES];
 
-    unsigned short __nint;
-} __kstd_ide_channels[2];
+static volatile unsigned char g_ide_irq_invoked = 0;
 
-/* IDE Device Container Struct */
-struct IDEDevice
-{
-    unsigned char __model[41];
-    unsigned char __reserved;
-    unsigned char __channel;
-    unsigned char __drive;
+static uint8 ide_read_register(uint8 channel, uint8 reg);
+static void ide_write_register(uint8 channel, uint8 reg, uint8 data);
 
-    unsigned short __capabilities;
-    unsigned short __signature;
-    unsigned short __type;
+// read register value from the given channel
+static uint8 ide_read_register(uint8 channel, uint8 reg) {
+    uint8 ret;
 
-    unsigned int __commandsets;
-    unsigned int __size;
-} __kstd_ide_devices[4];
+    // write value ata-control to tell irq is ready
+    if (reg > 0x07 && reg < 0x0C)
+        ide_write_register(channel, ATA_REG_CONTROL, 0x80 | g_ide_channels[channel].no_intr);
 
-static unsigned char __kstd_ide_read_channel(unsigned char __channel, unsigned char __reg)
-{
-    unsigned char __data;
+    // read register from base channel port
+    if (reg < 0x08)
+        ret = __kstd_inb(g_ide_channels[channel].base + reg - 0x00);
+    else if (reg < 0x0C)
+        ret = __kstd_inb(g_ide_channels[channel].base + reg - 0x06);
+    else if (reg < 0x0E)
+        ret = __kstd_inb(g_ide_channels[channel].control + reg - 0x0A);
+    else if (reg < 0x16)
+        ret = __kstd_inb(g_ide_channels[channel].bm_ide + reg - 0x0E);
 
-    if (__reg > 0x07 && __reg < 0x0C)
-    {
-        __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, 0x80 | __kstd_ide_channels[__channel].__nint);
-    }
-    
-    if (__reg < 0x08)
-    {
-        __data = __kstd_inb(__kstd_ide_channels[__channel].__base + __reg - 0x00);
-    }
-    else if (__reg < 0x0C)
-    {
-        __data = __kstd_inb(__kstd_ide_channels[__channel].__base + __reg - 0x06);
-    }
-    else if (__reg < 0x0E)
-    {
-        __data = __kstd_inb(__kstd_ide_channels[__channel].__cbase + __reg - 0x0A);
-    }
-    else if (__reg < 0x16)
-    {
-        __data = __kstd_inb(__kstd_ide_channels[__channel].__bmide + __reg - 0x0E);
-    }
+    // write value to tell reading is done
+    if (reg > 0x07 && reg < 0x0C)
+        ide_write_register(channel, ATA_REG_CONTROL, g_ide_channels[channel].no_intr);
 
-    if (__reg > 0x07 && __reg < 0x0C)
-    {
-        __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, __kstd_ide_channels[__channel].__nint);
-    }
-
-    return __data;
+    return ret;
 }
 
-static void __kstd_ide_write_channel(unsigned char __channel, unsigned char __reg, unsigned char __data)
-{
-    if (__reg > 0x07 && __reg < 0x0C)
-    {
-        __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, 0x80 | __kstd_ide_channels[__channel].__nint);
-    }
+// write data to register to the given channel
+static void ide_write_register(uint8 channel, uint8 reg, uint8 data) {
+    // write value ata-control to tell irq is ready
+    if (reg > 0x07 && reg < 0x0C)
+        ide_write_register(channel, ATA_REG_CONTROL, 0x80 | g_ide_channels[channel].no_intr);
 
-    if (__reg < 0x08)
-    {
-        __kstd_outb(__kstd_ide_channels[__channel].__base + __reg - 0x00, __data);
-    }
-    else if (__reg < 0x0C)
-    {
-        __kstd_outb(__kstd_ide_channels[__channel].__base + __reg - 0x06, __data);
-    }
-    else if (__reg < 0x0E)
-    {
-        __kstd_outb(__kstd_ide_channels[__channel].__cbase + __reg - 0x0A, __data);
-    }
-    else if (__reg < 0x16)
-    {
-        __kstd_outb(__kstd_ide_channels[__channel].__bmide + __reg - 0x0E, __data);
-    }
+    // write data to register ports
+    if (reg < 0x08)
+        __kstd_outb(g_ide_channels[channel].base + reg - 0x00, data);
+    else if (reg < 0x0C)
+        __kstd_outb(g_ide_channels[channel].base + reg - 0x06, data);
+    else if (reg < 0x0E)
+        __kstd_outb(g_ide_channels[channel].control + reg - 0x0A, data);
+    else if (reg < 0x16)
+        __kstd_outb(g_ide_channels[channel].bm_ide + reg - 0x0E, data);
 
-    if (__reg > 0x07 && __reg < 0x0C)
-    {
-        __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, __kstd_ide_channels[__channel].__nint);
+    // write value to tell reading is done
+    if (reg > 0x07 && reg < 0x0C)
+        ide_write_register(channel, ATA_REG_CONTROL, g_ide_channels[channel].no_intr);
+}
+
+// read long word from reg port for quads times
+void insl(uint16 reg, uint32 *buffer, int quads) {
+    int index;
+    for (index = 0; index < quads; index++) {
+        buffer[index] = __kstd_inl(reg);
     }
 }
 
-void __kstd_ide_insl(unsigned short __register, unsigned int *__buffer_ptr, int __quads)
-{
-    int __index;
-
-    for (__index = 0; __index < __quads; __index++)
-    {
-        __buffer_ptr[__index] = __kstd_inb(__register);
+// write long word to reg port for quads times
+void outsl(uint16 reg, uint32 *buffer, int quads) {
+    int index;
+    for (index = 0; index < quads; index++) {
+        __kstd_outl(reg, buffer[index]);
     }
 }
 
-void __kstd_ide_outsl(unsigned short __register, unsigned int *__buffer_ptr, int __quads)
-{
-    int __index;
+// read collection of value from a channel into given buffer
+void ide_read_buffer(uint8 channel, uint8 reg, uint32 *buffer, uint32 quads) {
+    if (reg > 0x07 && reg < 0x0C)
+        ide_write_register(channel, ATA_REG_CONTROL, 0x80 | g_ide_channels[channel].no_intr);
 
-    for (__index = 0; __index < __quads; __index++)
-    {
-        __kstd_outb(__register, __buffer_ptr[__index]);
-    }
+    // get value of data-segment to extra segment by savin glast es value
+    asm("pushw %es");
+    asm("movw %ds, %ax");
+    asm("movw %ax, %es");
+
+    if (reg < 0x08)
+        insl(g_ide_channels[channel].base + reg - 0x00, buffer, quads);
+    else if (reg < 0x0C)
+        insl(g_ide_channels[channel].base + reg - 0x06, buffer, quads);
+    else if (reg < 0x0E)
+        insl(g_ide_channels[channel].control + reg - 0x0A, buffer, quads);
+    else if (reg < 0x16)
+        insl(g_ide_channels[channel].bm_ide + reg - 0x0E, buffer, quads);
+
+    asm("popw %es;");
+
+    if (reg > 0x07 && reg < 0x0C)
+        ide_write_register(channel, ATA_REG_CONTROL, g_ide_channels[channel].no_intr);
 }
 
-void __kstd_ide_read_buffer(unsigned char __channel, unsigned char __reg, unsigned int *__buffer, unsigned int __quads)
-{
-    if (__reg > 0x07 && __reg < 0x0C)
-    {
-        __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, 0x80 | __kstd_ide_channels[__channel].__nint);
-    }
+void ide_write_buffer(uint8 channel, uint8 reg, uint32 *buffer, uint32 quads) {
+    if (reg > 0x07 && reg < 0x0C)
+        ide_write_register(channel, ATA_REG_CONTROL, 0x80 | g_ide_channels[channel].no_intr);
 
-    /* Save ES register */
+    // get value of data-segment to extra segment by savin glast es value
+    asm("pushw %es");
+    asm("movw %ds, %ax");
+    asm("movw %ax, %es");
 
-    asm volatile ("pushw %es");
-    asm volatile ("movw %ds, %ax");
-    asm volatile ("movw %ax, %es");
+    if (reg < 0x08)
+        outsl(g_ide_channels[channel].base + reg - 0x00, buffer, quads);
+    else if (reg < 0x0C)
+        outsl(g_ide_channels[channel].base + reg - 0x06, buffer, quads);
+    else if (reg < 0x0E)
+        outsl(g_ide_channels[channel].control + reg - 0x0A, buffer, quads);
+    else if (reg < 0x16)
+        outsl(g_ide_channels[channel].bm_ide + reg - 0x0E, buffer, quads);
 
-    if (__reg < 0x08)
-    {
-        __kstd_ide_insl(__kstd_ide_channels[__channel].__base + __reg - 0x00, __buffer, __quads);
-    }
-    else if (__reg < 0x0C)
-    {
-        __kstd_ide_insl(__kstd_ide_channels[__channel].__base + __reg - 0x06, __buffer, __quads);
-    }
-    else if (__reg < 0x0E)
-    {
-        __kstd_ide_insl(__kstd_ide_channels[__channel].__cbase + __reg - 0x0A, __buffer, __quads);
-    }
-    else if (__reg < 0x16)
-    {
-        __kstd_ide_insl(__kstd_ide_channels[__channel].__bmide + __reg - 0x0E, __buffer, __quads);
-    }
+    asm("popw %es;");
 
-    /* Restore ES register */
-
-    asm volatile ("popw %es");
-
-    if (__reg > 0x07 && __reg < 0x0C)
-    {
-        __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, __kstd_ide_channels[__channel].__nint);
-    }
+    if (reg > 0x07 && reg < 0x0C)
+        ide_write_register(channel, ATA_REG_CONTROL, g_ide_channels[channel].no_intr);
 }
 
-void __kstd_ide_write_buffer(unsigned char __channel, unsigned char __reg, unsigned int *__buffer, unsigned int __quads)
-{
-    if (__reg > 0x07 && __reg < 0x0C)
-    {
-        __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, 0x80 | __kstd_ide_channels[__channel].__nint);
-    }
-
-    /* Save ES register */
-
-    asm volatile ("pushw %es");
-    asm volatile ("movw %ds, %ax");
-    asm volatile ("movw %ax, %es");
-
-    if (__reg < 0x08)
-    {
-        __kstd_ide_outsl(__kstd_ide_channels[__channel].__base + __reg - 0x00, __buffer, __quads);
-    }
-    else if (__reg < 0x0C)
-    {
-        __kstd_ide_outsl(__kstd_ide_channels[__channel].__base + __reg - 0x06, __buffer, __quads);
-    }
-    else if (__reg < 0x0E)
-    {
-        __kstd_ide_outsl(__kstd_ide_channels[__channel].__cbase + __reg - 0x0A, __buffer, __quads);
-    }
-    else if (__reg < 0x16)
-    {
-        __kstd_ide_outsl(__kstd_ide_channels[__channel].__bmide + __reg - 0x0E, __buffer, __quads);
-    }
-
-    /* Restore ES register */
-
-    asm volatile ("popw %es");
-
-    if (__reg > 0x07 && __reg < 0x0C)
-    {
-        __kstd_ide_write_channel(__channel, ATA_REG_CONTROL, __kstd_ide_channels[__channel].__nint);
-    }
-}
-
-unsigned char __kstd_ide_polling_channel(unsigned char __channel, unsigned char __deepcheck)
-{
+// wait until drive is ready, keep polling ide device until it is not busy status
+uint8 ide_polling(uint8 channel, uint8 advanced_check) {
+    // (I) Delay 400 nanosecond for BSY to be set:
     for (int i = 0; i < 4; i++)
-    {
-        __kstd_ide_read_channel(__channel, ATA_REG_ALTSTATUS);
+        // Reading the Alternate Status port wastes 100ns; loop four times.
+        ide_read_register(channel, ATA_REG_ALTSTATUS);
+
+    // (II) Wait for BSY to be cleared:
+    while (ide_read_register(channel, ATA_REG_STATUS) & ATA_SR_BSY)
+        ;  // Wait for BSY to be zero.
+
+    if (advanced_check) {
+        // Read Status Register
+        uint8 state = ide_read_register(channel, ATA_REG_STATUS);
+
+        // (III) Check For Errors:
+        if (state & ATA_SR_ERR)
+            return 2;  // Error.
+
+        // (IV) Check If Device fault:
+        if (state & ATA_SR_DF)
+            return 1;  // Device Fault.
+
+        // (V) Check DRQ:
+        // BSY = 0; DF = 0; ERR = 0 so we should check for DRQ now.
+        if ((state & ATA_SR_DRQ) == 0)
+            return 3;  // DRQ should be set
     }
 
-    while (__kstd_ide_read_channel(__channel, ATA_REG_STATUS) & ATA_SR_BSY)
-    {
-        /* Wait */
-    }
-
-    if (__deepcheck)
-    {
-        unsigned char __state = __kstd_ide_read_channel(__channel, ATA_REG_STATUS);
-
-        if (__state & ATA_SR_ERR)
-        {
-            return 2;
-        }
-
-        if (__state & ATA_SR_DF)
-        {
-            return 1;
-        }
-
-        if ((__state & ATA_SR_DRQ) == 0)
-        {
-            return 3;
-        }
-    }
-
-    return 0;
+    return 0;  // No Error.
 }
 
-unsigned char __kstd_ide_print_error(unsigned int __drive, unsigned char __err)
-{
-    if (__err == 0)
-        return __err;
+uint8 ide_print_error(uint32 drive, uint8 err) {
+    if (err == 0)
+        return err;
 
-    kstd_write("IDE:");
-    if (__err == 1) {
-        kstd_write("- Device Fault\n");
-        __err = 19;
-    } else if (__err == 2) {
-        uint8 st = __kstd_ide_read_channel(__kstd_ide_devices[__drive].__channel, ATA_REG_ERROR);
+    printf("IDE:");
+    if (err == 1) {
+        printf("- Device Fault\n");
+        err = 19;
+    } else if (err == 2) {
+        uint8 st = ide_read_register(g_ide_devices[drive].channel, ATA_REG_ERROR);
         if (st & ATA_ER_AMNF) {
-            kstd_write("- No Address Mark Found\n");
-            __err = 7;
+            printf("- No Address Mark Found\n");
+            err = 7;
         }
         if (st & ATA_ER_TK0NF) {
-            kstd_write("- No Media or Media Error\n");
-            __err = 3;
+            printf("- No Media or Media Error\n");
+            err = 3;
         }
         if (st & ATA_ER_ABRT) {
-            kstd_write("- Command Aborted\n");
-            __err = 20;
+            printf("- Command Aborted\n");
+            err = 20;
         }
         if (st & ATA_ER_MCR) {
-            kstd_write("- No Media or Media Error\n");
-            __err = 3;
+            printf("- No Media or Media Error\n");
+            err = 3;
         }
         if (st & ATA_ER_IDNF) {
-            kstd_write("- ID mark not Found\n");
-            __err = 21;
+            printf("- ID mark not Found\n");
+            err = 21;
         }
         if (st & ATA_ER_MC) {
-            kstd_write("- No Media or Media Error\n");
-            __err = 3;
+            printf("- No Media or Media Error\n");
+            err = 3;
         }
         if (st & ATA_ER_UNC) {
-            kstd_write("- Uncorrectable Data Error\n");
-            __err = 22;
+            printf("- Uncorrectable Data Error\n");
+            err = 22;
         }
         if (st & ATA_ER_BBK) {
-            kstd_write("- Bad Sectors\n");
-            __err = 13;
+            printf("- Bad Sectors\n");
+            err = 13;
         }
-    } else if (__err == 3) {
-        kstd_write("- Reads Nothing\n");
-        __err = 23;
-    } else if (__err == 4) {
-        kstd_write("- Write Protected\n");
-        __err = 8;
+    } else if (err == 3) {
+        printf("- Reads Nothing\n");
+        err = 23;
+    } else if (err == 4) {
+        printf("- Write Protected\n");
+        err = 8;
     }
-    kstd_write(
-           (const char *[]){"Primary", "Secondary"}[__kstd_ide_devices[__drive].__channel]);
-    kstd_write(" ");
-    kstd_write((const char *[]){"Master", "Slave"}[__kstd_ide_devices[__drive].__drive]);
-    kstd_write(" ");
-    kstd_write(__kstd_ide_devices[__drive].__model);
+    printf("- [%s %s] %s\n",
+           (const char *[]){"Primary", "Secondary"}[g_ide_devices[drive].channel],
+           (const char *[]){"Master", "Slave"}[g_ide_devices[drive].drive],
+           g_ide_devices[drive].model);
 
-    return __err;
+    return err;
 }
 
-void __kstd_ide_initialize(unsigned int __PC1, unsigned int __PCC1, unsigned int __PC2, unsigned int __PCC2, unsigned int __BUS)
-{
+/*
+prim_channel_base_addr: Primary channel base address(0x1F0-0x1F7)
+prim_channel_control_base_addr: Primary channel control base address(0x3F6)
+sec_channel_base_addr: Secondary channel base address(0x170-0x177)
+sec_channel_control_addr: Secondary channel control base address(0x376)
+bus_master_addr: Bus master address(pass 0 for now)
+*/
+void ide_init(uint32 prim_channel_base_addr, uint32 prim_channel_control_base_addr,
+              uint32 sec_channel_base_addr, uint32 sec_channel_control_addr,
+              uint32 bus_master_addr) {
     int i, j, k, count = 0;
+    unsigned char ide_buf[2048] = {0};
 
-    unsigned char __kstd_ide_buf[2048] = {0};
+    // 1- Detect I/O Ports which interface IDE Controller:
+    // (checking the addr is removed for simplicity, just assigning all ports)
+    g_ide_channels[ATA_PRIMARY].base = prim_channel_base_addr;
+    g_ide_channels[ATA_PRIMARY].control = prim_channel_control_base_addr;
+    g_ide_channels[ATA_SECONDARY].base = sec_channel_base_addr;
+    g_ide_channels[ATA_SECONDARY].control = sec_channel_control_addr;
+    g_ide_channels[ATA_PRIMARY].bm_ide = bus_master_addr;
+    g_ide_channels[ATA_SECONDARY].bm_ide = bus_master_addr;
 
-    __kstd_ide_channels[ATA_PRIMARY].__base    = __PC1;
-    __kstd_ide_channels[ATA_PRIMARY].__cbase   = __PCC1;
-    __kstd_ide_channels[ATA_PRIMARY].__bmide   = __BUS;
+    // 2- Disable IRQs:
+    ide_write_register(ATA_PRIMARY, ATA_REG_CONTROL, 2);
+    ide_write_register(ATA_SECONDARY, ATA_REG_CONTROL, 2);
 
-    __kstd_ide_channels[ATA_SECONDARY].__base  = __PC2;
-    __kstd_ide_channels[ATA_SECONDARY].__cbase = __PCC2;
-    __kstd_ide_channels[ATA_SECONDARY].__bmide = __BUS;
+    // 3- Detect ATA-ATAPI Devices:
+    for (i = 0; i < 2; i++) {
+        for (j = 0; j < 2; j++) {
+            uint8 err = 0, type = IDE_ATA, status;
+            g_ide_devices[count].reserved = 0;  // Assuming that no drive here.
 
-    __kstd_ide_write_channel(ATA_PRIMARY, ATA_REG_CONTROL, 2);
-    __kstd_ide_write_channel(ATA_SECONDARY, ATA_REG_CONTROL, 2);
+            // (I) Select Drive:
+            ide_write_register(i, ATA_REG_HDDEVSEL, 0xA0 | (j << 4));  // Select Drive.
+            //sleep(1); // Wait 1ms for drive select to work.
 
-    for (i = 0; i < 2; i++)
-    {
-        for (j = 0; j < 2; j++)
-        {
-            unsigned char __err = 0;
-            unsigned char __type = IDE_ATA;
-            unsigned char __status;
+            // (II) Send ATA Identify Command:
+            ide_write_register(i, ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
+            //sleep(1); // This function should be implemented in your OS. which waits for 1 ms.
+            // it is based on System Timer Device Driver.
 
-            __kstd_ide_devices[count].__reserved = 0;
+            // (III) Polling:
+            if (ide_read_register(i, ATA_REG_STATUS) == 0) continue;  // If Status = 0, No Device.
 
-            __kstd_ide_write_channel(i, ATA_REG_HDDEVSEL, 0xA0 | (j << 4));
-            __kstd_ide_write_channel(i, ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
-
-            if (__kstd_ide_read_channel(i, ATA_REG_STATUS) == 0)
-            {
-                continue;
+            while (1) {
+                status = ide_read_register(i, ATA_REG_STATUS);
+                if ((status & ATA_SR_ERR)) {
+                    err = 1;
+                    break;
+                }                                                            // If Err, Device is not ATA.
+                if (!(status & ATA_SR_BSY) && (status & ATA_SR_DRQ)) break;  // Everything is right.
             }
 
-            while (1)
-            {
-                __status = __kstd_ide_read_channel(i, ATA_REG_STATUS);
+            // (IV) Probe for ATAPI Devices:
 
-                if ((__status & ATA_SR_ERR))
-                {
-                    __err = 1;
+            if (err != 0) {
+                unsigned char cl = ide_read_register(i, ATA_REG_LBA1);
+                unsigned char ch = ide_read_register(i, ATA_REG_LBA2);
 
-                    break;
-                }
-
-                if (!(__status & ATA_SR_BSY) && (__status & ATA_SR_DRQ))
-                {
-                    break;
-                }
-            }
-
-            if (__err != 0)
-            {
-                unsigned char __cl = __kstd_ide_read_channel(i, ATA_REG_LBA1);
-                unsigned char __ch = __kstd_ide_read_channel(i, ATA_REG_LBA2);
-
-                if (__cl == 0x14 && __ch == 0xEB)
-                {
-                    __type = IDE_ATAPI;
-                }
-                else if (__cl == 0x69 && __ch == 0x96)
-                {
-                    __type = IDE_ATAPI;
-                }
+                if (cl == 0x14 && ch == 0xEB)
+                    type = IDE_ATAPI;
+                else if (cl == 0x69 && ch == 0x96)
+                    type = IDE_ATAPI;
                 else
-                {
-                    continue;
-                }
+                    continue;  // Unknown Type (may not be a device).
 
-                __kstd_ide_write_channel(i, ATA_REG_COMMAND, ATA_CMD_IDENTIFY_PACKET);
+                ide_write_register(i, ATA_REG_COMMAND, ATA_CMD_IDENTIFY_PACKET);
+                //sleep(1);
             }
 
-            __kstd_ide_read_buffer(i, ATA_REG_DATA, (unsigned int *) __kstd_ide_buf, 128);
+            // (V) Read Identification Space of the Device:
+            ide_read_buffer(i, ATA_REG_DATA, (unsigned int *)ide_buf, 128);
 
-            __kstd_ide_devices[count].__reserved     = 1;
-            __kstd_ide_devices[count].__type         = __type;
-            __kstd_ide_devices[count].__channel      = i;
-            __kstd_ide_devices[count].__drive        = j;
-            __kstd_ide_devices[count].__signature    = *((unsigned short *) (__kstd_ide_buf + ATA_IDENT_DEVICETYPE));
-            __kstd_ide_devices[count].__capabilities = *((unsigned short *) (__kstd_ide_buf + ATA_IDENT_CAPABILITIES));
-            __kstd_ide_devices[count].__commandsets  = *((unsigned int *)   (__kstd_ide_buf + ATA_IDENT_COMMANDSETS));
+            // (VI) Read Device Parameters:
+            g_ide_devices[count].reserved = 1;
+            g_ide_devices[count].type = type;
+            g_ide_devices[count].channel = i;
+            g_ide_devices[count].drive = j;
+            g_ide_devices[count].signature = *((unsigned short *)(ide_buf + ATA_IDENT_DEVICETYPE));
+            g_ide_devices[count].features = *((unsigned short *)(ide_buf + ATA_IDENT_CAPABILITIES));
+            g_ide_devices[count].command_sets = *((unsigned int *)(ide_buf + ATA_IDENT_COMMANDSETS));
 
-            if (__kstd_ide_devices[count].__commandsets & (1 << 26))
-            {
-                __kstd_ide_devices[count].__size = *((unsigned int *) (__kstd_ide_buf + ATA_IDENT_MAX_LBA_EXT));
-            }
+            // (VII) Get Size:
+            if (g_ide_devices[count].command_sets & (1 << 26))
+                // Device uses 48-Bit Addressing:
+                g_ide_devices[count].size = *((unsigned int *)(ide_buf + ATA_IDENT_MAX_LBA_EXT));
             else
-            {
-                __kstd_ide_devices[count].__size = *((unsigned int *) (__kstd_ide_buf + ATA_IDENT_MAX_LBA));
+                // Device uses CHS or 28-bit Addressing:
+                g_ide_devices[count].size = *((unsigned int *)(ide_buf + ATA_IDENT_MAX_LBA));
+
+            // (VIII) String indicates model of device (like Western Digital HDD and SONY DVD-RW...):
+            for (k = 0; k < 40; k += 2) {
+                g_ide_devices[count].model[k] = ide_buf[ATA_IDENT_MODEL + k + 1];
+                g_ide_devices[count].model[k + 1] = ide_buf[ATA_IDENT_MODEL + k];
             }
-
-            for (k = 0; k < 40; k += 2)
-            {
-                __kstd_ide_devices[count].__model[k]     = __kstd_ide_buf[ATA_IDENT_MODEL + k + 1];
-                __kstd_ide_devices[count].__model[k + 1] = __kstd_ide_buf[ATA_IDENT_MODEL + k];
-            }
-
-            __kstd_ide_devices[count].__model[40] = '\0';
-
-            for (k = 39; i >= 0; k--)
-            {
-                char __ch = __kstd_ide_devices[count].__model[k];
-
-                if (__ch == ' ')
-                {
-                    __kstd_ide_devices[count].__model[k] = '\0';
-                }
+            g_ide_devices[count].model[40] = '\0';  // Terminate String.
+            // remove trailing spaces in model string
+            for(k = 39; k >= 0; k--) {
+                char ch = g_ide_devices[count].model[k];
+                if(ch == ' ')
+                    g_ide_devices[count].model[k] = '\0';
                 else
-                {
                     break;
-                }
             }
 
             count++;
         }
-    
-        for (i = 0; i < 4; i++)
-        {
-            if (__kstd_ide_devices[i].__reserved == 1)
-            {
-                kstd_write("Found ");
-                kstd_write((const char *[]) {"ATA", "ATAPI"}[__kstd_ide_devices[i].__type]);
-                kstd_write(" Drive ");
-                
-                char *__ssize;
-
-                kstd_itoa(__ssize, 10, __kstd_ide_devices[i].__size / 1024 / 2);
-
-                kstd_write(__ssize);
-                kstd_write("MB - ");
-                kstd_write(__kstd_ide_devices[i].__model);
-            }
-        }
     }
+
+    // 4- Print Summary:
+    for (i = 0; i < 4; i++)
+        if (g_ide_devices[i].reserved == 1) {
+            printf("%d:-\n", i);
+            printf("  model: %s\n", g_ide_devices[i].model);
+            printf("  type: %s\n", (const char *[]){"ATA", "ATAPI"}[g_ide_devices[i].type]);
+            printf("  drive: %u, channel: %u\n", g_ide_devices[i].drive, g_ide_devices[i].channel);
+            printf("  base: 0x%x, control: 0x%x\n", g_ide_channels[i].base, g_ide_channels[i].control);
+            printf("  size: %u sectors, %u bytes\n", g_ide_devices[i].size, g_ide_devices[i].size * ATA_SECTOR_SIZE);
+            printf("  signature: 0x%x, features: %d\n", g_ide_devices[i].signature, g_ide_devices[i].features);
+        }
 }
 
-unsigned char __kstd_ide_ata_access(unsigned char __direction, unsigned char __drive, unsigned int __lba, unsigned char __nsectors, unsigned int __buffer)
-{
-    unsigned char lba_mode, dma, cmd;
-    unsigned char lba_io[6];
-    
-    unsigned int channel    = __kstd_ide_devices[__drive].__channel;
-    unsigned int childbit   = __kstd_ide_devices[__drive].__drive;
-    unsigned int bus        = __kstd_ide_channels[channel].__base;
-    unsigned int words      = 256;
-    
-    unsigned short cyl, i;
+uint8 ide_ata_access(uint8 direction, uint8 drive, uint32 lba, uint8 num_sectors, uint32 *buffer) {
+    uint8 lba_mode /* 0: CHS, 1:LBA28, 2: LBA48 */, dma /* 0: No DMA, 1: DMA */, cmd;
+    uint8 lba_io[6];
+    uint32 channel = g_ide_devices[drive].channel;  // Read the Channel.
+    uint32 slavebit = g_ide_devices[drive].drive;   // Read the Drive [Master/Slave]
+    uint32 bus = g_ide_channels[channel].base;      // Bus Base, like 0x1F0 which is also data port.
+    uint32 words = 256;                             // Almost every ATA drive has a sector-size of 512-byte.
+    uint16 cyl, i;
+    uint8 head, sect, err;
 
-    unsigned char head, sect, err;
-
-    __kstd_ide_write_channel(channel, ATA_REG_CONTROL, __kstd_ide_channels[channel].__nint = (__kstd_ide_irq_invoked = 0x0) + 0x02);
+    ide_write_register(channel, ATA_REG_CONTROL, g_ide_channels[channel].no_intr = (g_ide_irq_invoked = 0x0) + 0x02);
 
     // (I) Select one from LBA28, LBA48 or CHS;
-    if (__lba >= 0x10000000)
-    {
+    if (lba >= 0x10000000) {  // Sure Drive should support LBA in this case, or you are
+                              // giving a wrong LBA.
+        // LBA48:
         lba_mode = LBA_MODE_48;
-        lba_io[0] = (__lba & 0x000000FF) >> 0;
-        lba_io[1] = (__lba & 0x0000FF00) >> 8;
-        lba_io[2] = (__lba & 0x00FF0000) >> 16;
-        lba_io[3] = (__lba & 0xFF000000) >> 24;
-        lba_io[4] = 0;
-        lba_io[5] = 0;
-        head = 0;
-    }
-    else if (__kstd_ide_devices[__drive].__capabilities & 0x200)
-    {
+        lba_io[0] = (lba & 0x000000FF) >> 0;
+        lba_io[1] = (lba & 0x0000FF00) >> 8;
+        lba_io[2] = (lba & 0x00FF0000) >> 16;
+        lba_io[3] = (lba & 0xFF000000) >> 24;
+        lba_io[4] = 0;                                   // LBA28 is integer, so 32-bits are enough to access 2TB.
+        lba_io[5] = 0;                                   // LBA28 is integer, so 32-bits are enough to access 2TB.
+        head = 0;                                        // Lower 4-bits of HDDEVSEL are not used here.
+    } else if (g_ide_devices[drive].features & 0x200) {  // Drive supports LBA?
+        // LBA28:
         lba_mode = LBA_MODE_28;
-        lba_io[0] = (__lba & 0x00000FF) >> 0;
-        lba_io[1] = (__lba & 0x000FF00) >> 8;
-        lba_io[2] = (__lba & 0x0FF0000) >> 16;
-        lba_io[3] = 0;
-        lba_io[4] = 0;
-        lba_io[5] = 0;
-        head = (__lba & 0xF000000) >> 24;
-    }
-    else
-    {
+        lba_io[0] = (lba & 0x00000FF) >> 0;
+        lba_io[1] = (lba & 0x000FF00) >> 8;
+        lba_io[2] = (lba & 0x0FF0000) >> 16;
+        lba_io[3] = 0;  // These Registers are not used here.
+        lba_io[4] = 0;  // These Registers are not used here.
+        lba_io[5] = 0;  // These Registers are not used here.
+        head = (lba & 0xF000000) >> 24;
+    } else {
+        // CHS:
         lba_mode = LBA_MODE_CHS;
-        sect = (__lba % 63) + 1;
-        cyl = (__lba + 1 - sect) / (16 * 63);
+        sect = (lba % 63) + 1;
+        cyl = (lba + 1 - sect) / (16 * 63);
         lba_io[0] = sect;
         lba_io[1] = (cyl >> 0) & 0xFF;
         lba_io[2] = (cyl >> 8) & 0xFF;
         lba_io[3] = 0;
         lba_io[4] = 0;
         lba_io[5] = 0;
-        head = (__lba + 1 - sect) % (16 * 63) / (63);
+        head = (lba + 1 - sect) % (16 * 63) / (63);  // Head number is written to HDDEVSEL lower 4-bits.
     }
 
-    dma = 0;
+    // (II) See if drive supports DMA or not;
+    dma = 0;  // We don't support DMA
 
-    while (__kstd_ide_read_channel(channel, ATA_REG_STATUS) & ATA_SR_BSY)
-    {
-        /* Wait */
-    }
+    // (III) Wait if the drive is busy;
+    while (ide_read_register(channel, ATA_REG_STATUS) & ATA_SR_BSY) {
+    }  // Wait if busy.
 
+    // (IV) Select Drive from the controller;
     if (lba_mode == LBA_MODE_CHS)
-        __kstd_ide_write_channel(channel, ATA_REG_HDDEVSEL, 0xA0 | (childbit << 4) | head);
+        ide_write_register(channel, ATA_REG_HDDEVSEL, 0xA0 | (slavebit << 4) | head);  // Drive & CHS.
     else
-        __kstd_ide_write_channel(channel, ATA_REG_HDDEVSEL, 0xE0 | (childbit << 4) | head);
+        ide_write_register(channel, ATA_REG_HDDEVSEL, 0xE0 | (slavebit << 4) | head);  // Drive & LBA
 
     // (V) Write Parameters;
-    if (lba_mode == LBA_MODE_48)
-    {
-        __kstd_ide_write_channel(channel, ATA_REG_SECCOUNT1, 0);
-        __kstd_ide_write_channel(channel, ATA_REG_LBA3, lba_io[3]);
-        __kstd_ide_write_channel(channel, ATA_REG_LBA4, lba_io[4]);
-        __kstd_ide_write_channel(channel, ATA_REG_LBA5, lba_io[5]);
+    if (lba_mode == LBA_MODE_48) {
+        ide_write_register(channel, ATA_REG_SECCOUNT1, 0);
+        ide_write_register(channel, ATA_REG_LBA3, lba_io[3]);
+        ide_write_register(channel, ATA_REG_LBA4, lba_io[4]);
+        ide_write_register(channel, ATA_REG_LBA5, lba_io[5]);
     }
-
-    __kstd_ide_write_channel(channel, ATA_REG_SECCOUNT0, __nsectors);
-    __kstd_ide_write_channel(channel, ATA_REG_LBA0, lba_io[0]);
-    __kstd_ide_write_channel(channel, ATA_REG_LBA1, lba_io[1]);
-    __kstd_ide_write_channel(channel, ATA_REG_LBA2, lba_io[2]);
+    ide_write_register(channel, ATA_REG_SECCOUNT0, num_sectors);
+    ide_write_register(channel, ATA_REG_LBA0, lba_io[0]);
+    ide_write_register(channel, ATA_REG_LBA1, lba_io[1]);
+    ide_write_register(channel, ATA_REG_LBA2, lba_io[2]);
 
     // (VI) Select the command and send it;
-    if (lba_mode == LBA_MODE_CHS && dma == 0 && __direction == ATA_READ)  cmd = ATA_CMD_READ_PIO;
-    if (lba_mode == LBA_MODE_28  && dma == 0 && __direction == ATA_READ)  cmd = ATA_CMD_READ_PIO;
-    if (lba_mode == LBA_MODE_48  && dma == 0 && __direction == ATA_READ)  cmd = ATA_CMD_READ_PIO_EXT;
-    if (lba_mode == LBA_MODE_CHS && dma == 1 && __direction == ATA_READ)  cmd = ATA_CMD_READ_DMA;
-    if (lba_mode == LBA_MODE_28  && dma == 1 && __direction == ATA_READ)  cmd = ATA_CMD_READ_DMA;
-    if (lba_mode == LBA_MODE_48  && dma == 1 && __direction == ATA_READ)  cmd = ATA_CMD_READ_DMA_EXT;
-    if (lba_mode == LBA_MODE_CHS && dma == 0 && __direction == ATA_WRITE) cmd = ATA_CMD_WRITE_PIO;
-    if (lba_mode == LBA_MODE_28  && dma == 0 && __direction == ATA_WRITE) cmd = ATA_CMD_WRITE_PIO;
-    if (lba_mode == LBA_MODE_48  && dma == 0 && __direction == ATA_WRITE) cmd = ATA_CMD_WRITE_PIO_EXT;
-    if (lba_mode == LBA_MODE_CHS && dma == 1 && __direction == ATA_WRITE) cmd = ATA_CMD_WRITE_DMA;
-    if (lba_mode == LBA_MODE_28  && dma == 1 && __direction == ATA_WRITE) cmd = ATA_CMD_WRITE_DMA;
-    if (lba_mode == LBA_MODE_48  && dma == 1 && __direction == ATA_WRITE) cmd = ATA_CMD_WRITE_DMA_EXT;
+    if (lba_mode == LBA_MODE_CHS && dma == 0 && direction == ATA_READ) cmd = ATA_CMD_READ_PIO;
+    if (lba_mode == LBA_MODE_28 && dma == 0 && direction == ATA_READ) cmd = ATA_CMD_READ_PIO;
+    if (lba_mode == LBA_MODE_48 && dma == 0 && direction == ATA_READ) cmd = ATA_CMD_READ_PIO_EXT;
+    if (lba_mode == LBA_MODE_CHS && dma == 1 && direction == ATA_READ) cmd = ATA_CMD_READ_DMA;
+    if (lba_mode == LBA_MODE_28 && dma == 1 && direction == ATA_READ) cmd = ATA_CMD_READ_DMA;
+    if (lba_mode == LBA_MODE_48 && dma == 1 && direction == ATA_READ) cmd = ATA_CMD_READ_DMA_EXT;
+    if (lba_mode == LBA_MODE_CHS && dma == 0 && direction == ATA_WRITE) cmd = ATA_CMD_WRITE_PIO;
+    if (lba_mode == LBA_MODE_28 && dma == 0 && direction == ATA_WRITE) cmd = ATA_CMD_WRITE_PIO;
+    if (lba_mode == LBA_MODE_48 && dma == 0 && direction == ATA_WRITE) cmd = ATA_CMD_WRITE_PIO_EXT;
+    if (lba_mode == LBA_MODE_CHS && dma == 1 && direction == ATA_WRITE) cmd = ATA_CMD_WRITE_DMA;
+    if (lba_mode == LBA_MODE_28 && dma == 1 && direction == ATA_WRITE) cmd = ATA_CMD_WRITE_DMA;
+    if (lba_mode == LBA_MODE_48 && dma == 1 && direction == ATA_WRITE) cmd = ATA_CMD_WRITE_DMA_EXT;
+    ide_write_register(channel, ATA_REG_COMMAND, cmd);  // Send the Command.
 
-    __kstd_ide_write_channel(channel, ATA_REG_COMMAND, cmd);
-
-    if (dma)
-    {
-        if (__direction == ATA_READ)
-        {
+    if (dma) {
+        if (direction == ATA_READ) {
             // DMA Read
-        }
-        else
-        {
+        } else {
             // DMA write
         }
-    }
-    else if (__direction == ATA_READ)
-    {
+    } else if (direction == ATA_READ) {
         // PIO Read.
-        for (i = 0; i < __nsectors; i++)
-        {
-            if ((err = __kstd_ide_polling_channel(channel, 1)))
-                return err;
+        for (i = 0; i < num_sectors; i++) {
+            if ((err = ide_polling(channel, 1)))
+                return err;  // Polling, set error and exit if there is.
 
+            // save es segment and repeat insw(read stream of shorts) instruction util no of sectors are read into buffer
             asm("pushw %es");
             asm("rep insw"
                 :
-                : "c"(words), "d"(bus), "D"(__buffer));
+                : "c"(words), "d"(bus), "D"(buffer));  // Receive Data.
             asm("popw %es");
-            
-            __buffer += (words * 2);
+            buffer += (words * 2);
         }
-    }
-    else
-    {
+    } else {
         // PIO Write.
-        for (i = 0; i < __nsectors; i++)
-        {
-            __kstd_ide_polling_channel(channel, 0);
-
+        for (i = 0; i < num_sectors; i++) {
+            ide_polling(channel, 0);  // Polling.
+            // save es segment and repeat outsw(write stream of shorts) instruction util no of sectors are written to ide device
             asm("pushw %ds");
-            asm("rep outsw" ::"c"(words), "d"(bus), "S"(__buffer));
+            asm("rep outsw" ::"c"(words), "d"(bus), "S"(buffer));  // Send Data
             asm("popw %ds");
-
-            __buffer += (words * 2);
+            buffer += (words * 2);
         }
-
-        __kstd_ide_write_channel(channel, ATA_REG_COMMAND, (char[]) {ATA_CMD_CACHE_FLUSH, ATA_CMD_CACHE_FLUSH, ATA_CMD_CACHE_FLUSH_EXT}[lba_mode]);
-        __kstd_ide_polling_channel(channel, 0);
+        // send the flush commands
+        ide_write_register(channel, ATA_REG_COMMAND, (char[]){ATA_CMD_CACHE_FLUSH, ATA_CMD_CACHE_FLUSH, ATA_CMD_CACHE_FLUSH_EXT}[lba_mode]);
+        ide_polling(channel, 0);  // Polling.
     }
 
-    return 0;
+    return 0;  // Easy, isn't it?
 }
 
-void __kstd_ide_waitfor_irq(void)
-{
-    while (!__kstd_ide_irq_invoked)
-    {
-        /* Wait */
-    }
-
-    __kstd_ide_irq_invoked = 0;
+void ide_wait_irq() {
+    while (!g_ide_irq_invoked)
+        ;
+    g_ide_irq_invoked = 0;
+}
+void ide_irq() {
+    g_ide_irq_invoked = 1;
 }
 
-void __kstd_ide_irq(void)
-{
-    __kstd_ide_irq_invoked = 1;
-}
-
-int __kstd_ide_read_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer)
-{
-    if (__drive > MAXIMUM_IDE_DEVICES || __kstd_ide_devices[__drive].__reserved == 0)
-    {
-        kstd_write("IDE: - Drive not found!\n");
-
+// start from lba = 0
+int ide_read_sectors(uint8 drive, uint8 num_sectors, uint32 lba, uint32 *buffer) {
+    // 1: Check if the drive presents:
+    if (drive > MAXIMUM_IDE_DEVICES || g_ide_devices[drive].reserved == 0) {
+        printf("IDE ERROR: Drive not found\n");
         return -1;
     }
-    else if (((__lba + __nsectors) > __kstd_ide_devices[__drive].__size) && (__kstd_ide_devices[__drive].__type == IDE_ATA))
-    {
-        kstd_write("IDE: - LBA Address exceeded disk size!\n");
-
+    // 2: Check if inputs are valid:
+    else if (((lba + num_sectors) > g_ide_devices[drive].size) && (g_ide_devices[drive].type == IDE_ATA)) {
+        printf("IDE ERROR: LBA address(0x%x) is greater than the available drive sectors(0x%x)\n", lba, g_ide_devices[drive].size);
         return -2;
     }
-    else
-    {
-        unsigned char __err;
-
-        if (__kstd_ide_devices[__drive].__type == IDE_ATA)
-        {
-            __err = __kstd_ide_ata_access(ATA_READ, __drive, __lba, __nsectors, __buffer);
-        }
-
-        return __kstd_ide_print_error(__drive, __err);
+    // 3: Read in PIO Mode through Polling & IRQs:
+    else {
+        uint8 err;
+        if (g_ide_devices[drive].type == IDE_ATA)
+            err = ide_ata_access(ATA_READ, drive, lba, num_sectors, buffer);
+        // print if any error in reading
+        return ide_print_error(drive, err);
     }
-
     return 0;
 }
 
-int __kstd_ide_write_sectors(unsigned char __drive, unsigned char __nsectors, unsigned int __lba, unsigned int __buffer)
-{
-    if (__drive > MAXIMUM_IDE_DEVICES || __kstd_ide_devices[__drive].__reserved == 0)
-    {
-        kstd_write("IDE: - Drive not found!\n");
-
+// start from lba = 0
+int ide_write_sectors(uint8 drive, uint8 num_sectors, uint32 lba, uint32 *buffer) {
+    // 1: Check if the drive presents:
+    if (drive > MAXIMUM_IDE_DEVICES || g_ide_devices[drive].reserved == 0) {
+        printf("IDE ERROR: Drive not found\n");
         return -1;
     }
-    else if (((__lba + __nsectors) > __kstd_ide_devices[__drive].__size) && (__kstd_ide_devices[__drive].__type == IDE_ATA))
-    {
-        kstd_write("IDE: - LBA Address exceeded disk size!\n");
-
+    // 2: Check if inputs are valid:
+    else if (((lba + num_sectors) > g_ide_devices[drive].size) && (g_ide_devices[drive].type == IDE_ATA)) {
+        printf("IDE ERROR: LBA address(0x%x) is greater than the available drive sectors(0x%x)\n", lba, g_ide_devices[drive].size);
         return -2;
+    } else {
+        uint8 err;
+        if (g_ide_devices[drive].type == IDE_ATA)
+            err = ide_ata_access(ATA_WRITE, drive, lba, num_sectors, buffer);
+        // print if any error in writing
+        return ide_print_error(drive, err);
     }
-    else
-    {
-        unsigned char __err;
-
-        if (__kstd_ide_devices[__drive].__type == IDE_ATA)
-        {
-            __err = __kstd_ide_ata_access(ATA_WRITE, __drive, __lba, __nsectors, __buffer);
-        }
-
-        return __kstd_ide_print_error(__drive, __err);
-    }
-
     return 0;
 }
 
-int __kstd_ide_ata_initialize(void)
-{
-    __kstd_ide_initialize(0x1F0, 0x3F6, 0x170, 0x376, 0x000);
+void ata_init() {
+    ide_init(0x1F0, 0x3F6, 0x170, 0x376, 0x000);
+}
 
-    return 0;
+int ata_get_drive_by_model(const char *model) {
+    int i;
+    for(i = 0; i < MAXIMUM_IDE_DEVICES; i++) {
+        if(__kstd_strcmp((char*)g_ide_devices[i].model, (char *)model) == 0)
+            return i;
+    }
+    return -1;
 }

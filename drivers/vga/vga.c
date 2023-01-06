@@ -3,6 +3,7 @@
 #include "../pio/pio.h"
 
 #include "../../lib/stdlib.h"
+#include "../../lib/memory.h"
 
 void __kstd_vga_set_cursor(int __offset)
 {
@@ -112,4 +113,61 @@ void __kstd_vga_backspace(void)
 
 	VIDEO_MEMORY_POINTER[VIDEO_POINTER_SIZE] = ' ';
 	VIDEO_MEMORY_POINTER[VIDEO_POINTER_SIZE + 1] = ATTR_BYTE_BLK_ON_BLK;
+}
+
+void printf(const char *format, ...) {
+    char **arg = (char **)&format;
+    int c;
+    char buf[32];
+
+    arg++;
+
+    kstd_memset(buf, 0, sizeof(buf));
+    while ((c = *format++) != 0) {
+        if (c != '%')
+            __kstd_vga_putchar(c, ATTR_BYTE_TEXT_COLOR_STD);
+        else {
+            char *p, *p2;
+            int pad0 = 0, pad = 0;
+
+            c = *format++;
+            if (c == '0') {
+                pad0 = 1;
+                c = *format++;
+            }
+
+            if (c >= '0' && c <= '9') {
+                pad = c - '0';
+                c = *format++;
+            }
+
+            switch (c) {
+                case 'd':
+                case 'u':
+                case 'x':
+                    kstd_itoa(buf, c, *((int *)arg++));
+                    p = buf;
+                    goto string;
+                    break;
+
+                case 's':
+                    p = *arg++;
+                    if (!p)
+                        p = "(null)";
+
+                string:
+                    for (p2 = p; *p2; p2++)
+                        ;
+                    for (; p2 < p + pad; p2++)
+                        __kstd_vga_putchar(pad0 ? '0' : ' ', ATTR_BYTE_TEXT_COLOR_STD);
+                    while (*p)
+                        __kstd_vga_putchar(*p++, ATTR_BYTE_TEXT_COLOR_STD);
+                    break;
+
+                default:
+                    __kstd_vga_putchar(*((int *)arg++), ATTR_BYTE_TEXT_COLOR_STD);
+                    break;
+            }
+        }
+    }
 }
